@@ -18,9 +18,6 @@ The scope is both piano staves, all five printed systems: 20 sounding bars and t
 
 ## Findings for human review
 
-- PDF page 6, first system, bar 2, right hand: the printed fingering over the second sustained note is 5, not 3. The reconciled LilyPond now prints 5.
-- PDF page 6, first system, bar 3, right hand: the held notes have no printed fingering. Two added 1 markings were removed.
-- PDF page 6, third system, bars 10–12, left hand: the opening fingerings 4, 5, and 5 were restored.
 - PDF page 6, fifth system, bar 20, bass staff: the high-resolution copy shows only E4 dotted quarter followed by E3 eighth. The previous extra whole-measure rest was an invented reading and has been removed.
 - Fingerings on the repeated figures, especially in printed systems 3–4, need a dedicated mark-by-mark human comparison. The prominent visible fingerings are encoded, but this pass cannot claim every small numeral is present.
 - Every sounding note and printed mark still needs the project's independent human comparison before `withdrawn` can be removed or the work can be marked verified.
