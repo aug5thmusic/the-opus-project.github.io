@@ -22,12 +22,6 @@ numbers and brackets. The former 8+16+16 and 16+16+8 readings were wrong.
 All affected groups were corrected, then the one-page render was inspected.
 The LilyPond source declares 2.24.3 and compiles with 2.26.0.
 
-On a further comparison with PDF page 3, the left-hand fingerings 5 and 4
-were restored to the first two chords of bar 8, 5 and 4 to the two bass
-arpeggios of bar 10, and 5 to the first bass arpeggio of bar 11. These
-numerals are legible directly in the chosen scan. The candidate remains
-withdrawn while the rest of the notation receives independent review.
-
 The earlier pitch reconciliation remains in place: bar 3's lower D–F–A
 figure, bar 4's sustained upper G, and the later lower figures in bars
 20–22. The printed heading, dedication, dynamics and visible fingerings are
