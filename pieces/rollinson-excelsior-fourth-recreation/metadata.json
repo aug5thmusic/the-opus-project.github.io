@@ -7,7 +7,7 @@
   "instrumentation": "Reed organ (harmonium)",
   "license": "CC0 1.0",
   "source_library": "Library of Congress",
-  "source_id": "LCCN 2023842814; mussm-sm1882-03915",
+  "source_id": "LCCN 2023842814; mussm-sm1882-03915 | scope: PDF page 29, printed page 27, top 16 bars",
   "source_page": "https://www.loc.gov/item/2023842814/",
   "source_pdf": "https://tile.loc.gov/storage-services/public/music/mussm-sm1882-03915/mussm-sm1882-03915.pdf#page=29",
   "source_sha256": "7299364755ba732241042889c55a42660e765f7ce92ff84ef23caf0c0cf25848",
@@ -19,6 +19,5 @@
     "openai/gpt-6.1-sol",
     "openai/gpt-6.1-sol"
   ],
-  "verified_by": null,
-  "source_scope": "PDF page 29 / printed page 27: Fourth Recreation at the top, all 16 bars in four systems on both staves. The Triplet lesson below it is outside this work."
+  "verified_by": null
 }

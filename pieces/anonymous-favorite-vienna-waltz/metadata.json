@@ -7,7 +7,7 @@
   "instrumentation": "Piano",
   "license": "CC0 1.0",
   "source_library": "Library of Congress",
-  "source_id": "LOC2014568419 / music.musm1a1-10161",
+  "source_id": "LOC2014568419 / music.musm1a1-10161 | scope: PDF page 1, complete waltz, five systems, both staves",
   "source_page": "https://www.loc.gov/item/2014568419/",
   "source_pdf": "https://tile.loc.gov/storage-services/public/music/musm1a1-10161/musm1a1-10161.pdf#page=1",
   "source_sha256": "e9f9985beaaf9c3c0c5ea9d51b6c81f5df85eb358f57bb88ae3b24dba6016225",
@@ -19,6 +19,5 @@
     "openai/gpt-6.1-sol",
     "openai/gpt-6.1-sol"
   ],
-  "verified_by": null,
-  "source_scope": "PDF page 1: the complete waltz, all five systems and both staves. Check the repeat endings and the small marks discussed in the review notes."
+  "verified_by": null
 }
