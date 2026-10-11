@@ -39,11 +39,9 @@ function render(query = '') {
     addText(row, 'p', 'catalog-meta', score.catalogue);
     const status = score.verified_by
       ? 'Human verified'
-      : score.draft
-        ? 'Unmerged review draft'
-        : score.step === 3
-          ? 'Needs proofreading'
-          : `Step ${score.step}/3`;
+      : score.step === 3
+        ? 'Needs proofreading'
+        : `Step ${score.step}/3`;
     addText(row, 'span', 'badge', status);
 
     const links = document.createElement('div');

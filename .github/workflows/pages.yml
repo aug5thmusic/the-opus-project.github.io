@@ -4,11 +4,6 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
-    inputs:
-      review_pr:
-        description: 'PR number to publish as explicitly unmerged review drafts (blank for main)'
-        required: false
-        type: string
 
 permissions:
   contents: read
@@ -29,18 +24,7 @@ jobs:
       - name: Validate repository
         run: python3 scripts/check.py --write
       - name: Build catalog, sources, and PDFs
-        env:
-          OPUS_REVIEW_PR: ${{ inputs.review_pr }}
-        run: |
-          if [ -n "$OPUS_REVIEW_PR" ]; then
-            python3 scripts/build_site.py _site --review-pr "$OPUS_REVIEW_PR" --review-revision "$GITHUB_SHA"
-          else
-            if [ "$GITHUB_REF" != "refs/heads/main" ]; then
-              echo 'Non-main deployments must identify their review PR.' >&2
-              exit 1
-            fi
-            python3 scripts/build_site.py _site
-          fi
+        run: python3 scripts/build_site.py _site
       - if: github.event.repository.private == false
         uses: actions/configure-pages@v5
       - if: github.event.repository.private == false

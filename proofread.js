@@ -23,13 +23,13 @@ async function loadScores() {
 
 function showQueue(reviews) {
   titleNode.textContent = 'Scores for proofreading';
-  statusNode.textContent = 'These scores need human proofreading. Withdrawn candidates are labelled separately.';
+  statusNode.textContent = 'Drafts are separate from the catalog and are not human verified.';
   const queue = document.querySelector('[data-queue]');
   for (const score of reviews) {
     const item = document.createElement('li');
     const link = document.createElement('a');
     link.href = `proofread.html?piece=${encodeURIComponent(score.slug)}`;
-    link.textContent = `${score.composer} — ${score.title} (${score.catalogue})${score.withdrawn ? ' — withdrawn draft' : score.draft ? ' — unmerged review draft' : ''}`;
+    link.textContent = `${score.composer} — ${score.title} (${score.catalogue})`;
     item.append(link);
     queue.append(item);
   }
@@ -40,10 +40,8 @@ function showQueue(reviews) {
 function showScore(score) {
   titleNode.textContent = `${score.composer} — ${score.title}`;
   document.title = `${score.title} — Proofread — The OPUS Project`;
-  statusNode.textContent = score.withdrawn
-    ? 'Withdrawn draft — needs correction and human proofreading'
-    : score.draft
-      ? 'Unmerged review draft — needs human proofreading'
+  statusNode.textContent = score.draft
+    ? 'Draft candidate — not in the catalog or human verified'
     : score.verified_by
       ? `Human verified by @${score.verified_by}`
       : score.step === 3
@@ -51,9 +49,6 @@ function showScore(score) {
         : `Agent step ${score.step}/3 — not yet reconciled`;
 
   document.querySelector('[data-source-link]').href = score.source_pdf;
-  const scopeNode = document.querySelector('[data-scope]');
-  scopeNode.textContent = score.source_scope ? `Review scope: ${score.source_scope}` : '';
-  scopeNode.hidden = !score.source_scope;
   document.querySelector('[data-source-frame]').src = score.source_pdf;
   document.querySelector('[data-library-link]').href = score.source_page;
   const crosscheck = document.querySelector('[data-crosscheck-link]');
@@ -66,21 +61,41 @@ function showScore(score) {
   document.querySelector('[data-rendered-link]').href = score.pdf_url;
   document.querySelector('[data-rendered-frame]').src = score.pdf_url;
   document.querySelector('[data-lilypond-link]').href = score.lilypond_url;
-  document.querySelector('[data-edition-link]').href = `pieces/${encodeURIComponent(score.slug)}/metadata.json`;
-  const reviewLink = document.querySelector('[data-review-link]');
-  if (score.step === 3) {
-    reviewLink.href = `pieces/${encodeURIComponent(score.slug)}/RECONCILIATION.md`;
-  } else {
-    reviewLink.hidden = true;
-  }
-  document.querySelector('[data-revision]').textContent = score.lilypond_sha256
-    ? `Transcription SHA-256: ${score.lilypond_sha256}`
-    : '';
 
   const reportTitle = `Proofreading: ${score.composer} — ${score.title}`;
-  const reportBody = `Work: ${score.composer} — ${score.title}\nResult: [no errors found / corrections needed]\nPages and measures checked:\nLilyPond SHA-256 checked: ${score.lilypond_sha256 || '[enter revision]'}\n${score.review_url ? `Review PR: ${score.review_url}\nReview commit: ${score.review_revision}\n` : ''}Details:\nSource PDF: ${score.source_pdf}\nSource PDF SHA-256: ${score.source_sha256 || '[enter source digest]'}\nRendered PDF: ${new URL(score.pdf_url, window.location.href).href}`;
+  const reportBody = `Work: ${score.composer} — ${score.title}\nResult: [no errors found / corrections needed]\nPages and measures checked:\nRevision checked:\nDetails:\nSource PDF: ${score.source_pdf}\nRendered PDF: ${new URL(score.pdf_url, window.location.href).href}`;
   const params = new URLSearchParams({category: 'general', title: reportTitle, body: reportBody});
-  document.querySelector('[data-feedback]').href = `https://github.com/the-opus-project/the-opus-project.github.io/discussions/new?${params}`;
+  document.querySelector('[data-feedback]').href = `https://github.com/dhruv9saini/the-opus-project/discussions/new?${params}`;
+
+  const discussionNode = document.querySelector('[data-discussion]');
+  window.addEventListener('message', (event) => {
+    if (event.origin !== 'https://giscus.app') return;
+    if (event.source !== discussionNode.querySelector('iframe')?.contentWindow) return;
+    if (typeof event.data?.giscus?.error === 'string') discussionNode.hidden = true;
+  });
+
+  const discussionScript = document.createElement('script');
+  discussionScript.src = 'https://giscus.app/client.js';
+  discussionScript.async = true;
+  discussionScript.crossOrigin = 'anonymous';
+  const discussionOptions = {
+    repo: 'dhruv9saini/the-opus-project',
+    'repo-id': 'R_kgDOUtZHyQ',
+    category: 'General',
+    'category-id': 'DIC_kwDOUtZHyc4DGioB',
+    mapping: 'specific',
+    term: `Score reports: ${score.slug}`,
+    strict: '1',
+    'reactions-enabled': '0',
+    'emit-metadata': '0',
+    'input-position': 'top',
+    theme: 'preferred_color_scheme',
+    lang: 'en',
+  };
+  for (const [key, value] of Object.entries(discussionOptions)) {
+    discussionScript.setAttribute(`data-${key}`, value);
+  }
+  discussionNode.append(discussionScript);
 
   document.querySelector('[data-compare]').hidden = false;
   document.querySelector('[data-report]').hidden = false;
@@ -89,7 +104,7 @@ function showScore(score) {
 loadScores()
   .then(({catalog, reviews}) => {
     if (!piece) {
-      showQueue([...catalog.filter((score) => !score.verified_by), ...reviews]);
+      showQueue(reviews);
       return;
     }
     const score = [...catalog, ...reviews].find((entry) => entry.slug === piece);

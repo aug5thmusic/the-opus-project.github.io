@@ -3,10 +3,7 @@
 
 from __future__ import annotations
 
-import argparse
-import re
 import shutil
-import hashlib
 import subprocess
 import sys
 from pathlib import Path
@@ -21,7 +18,6 @@ PUBLIC_FILES = (
     "styles.css",
     "app.js",
     "proofread.js",
-    "favicon.svg",
     "LICENSE",
 )
 
@@ -48,29 +44,18 @@ def review_queue() -> dict[str, object]:
             "pdf_url": str(Path(source_relative).with_suffix(".pdf")),
             "source_page": data["source_page"],
             "source_pdf": data["source_pdf"],
-            "source_scope": data.get("source_scope", ""),
             "crosscheck_name": data["crosscheck_name"],
             "crosscheck_url": data["crosscheck_url"],
             "draft": True,
-            "withdrawn": True,
-            "source_sha256": data["source_sha256"],
-            "lilypond_sha256": hashlib.sha256((ROOT / source_relative).read_bytes()).hexdigest(),
         })
     return {"schema": 1, "scores": entries}
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("output")
-    parser.add_argument("--review-pr", type=int)
-    parser.add_argument("--review-revision")
-    args = parser.parse_args()
-    if args.review_pr is not None:
-        if args.review_pr < 1 or not re.fullmatch(r"[0-9a-f]{40}", args.review_revision or ""):
-            fail("a review build needs a positive PR number and its full commit SHA")
-    elif args.review_revision is not None:
-        fail("--review-revision requires --review-pr")
-    output = Path(args.output).resolve()
+    if len(sys.argv) != 2:
+        print("usage: python3 scripts/build_site.py OUTPUT", file=sys.stderr)
+        return 2
+    output = Path(sys.argv[1]).resolve()
     if output.exists():
         fail(f"output already exists: {output}")
     parent = output.parent
@@ -82,24 +67,10 @@ def main() -> int:
         fail("lilypond is not installed")
     catalog, _ = expected_catalog()
     reviews = review_queue()
-    review_url = f"https://github.com/the-opus-project/the-opus-project.github.io/pull/{args.review_pr}"
-    if args.review_pr is not None:
-        for entry in catalog["scores"]:
-            if not entry["verified_by"]:
-                entry.update(draft=True, withdrawn=False, review_pr=args.review_pr,
-                             review_revision=args.review_revision, review_url=review_url)
 
     output.mkdir(mode=0o755)
     for relative in PUBLIC_FILES:
         shutil.copy2(ROOT / relative, output / relative)
-        if args.review_pr is not None and relative.endswith(".html"):
-            page = output / relative
-            banner = (f'<p class="review-banner">Unmerged review drafts — awaiting human approval. '
-                      f'<a href="{review_url}">Review PR #{args.review_pr}</a></p>')
-            html = page.read_text(encoding="utf-8").replace("<main>", "<main>\n    " + banner, 1)
-            html = html.replace("https://github.com/the-opus-project/the-opus-project.github.io/blob/main/",
-                                f"https://github.com/the-opus-project/the-opus-project.github.io/blob/{args.review_revision}/")
-            page.write_text(html, encoding="utf-8")
     (output / "catalog.json").write_text(render_catalog(catalog), encoding="utf-8")
     (output / "reviews.json").write_text(render_catalog(reviews), encoding="utf-8")
 
@@ -109,10 +80,6 @@ def main() -> int:
         deployed_source = output / source_relative
         deployed_source.parent.mkdir(mode=0o755, parents=True, exist_ok=True)
         shutil.copy2(source, deployed_source)
-        for record in ("metadata.json", "SOURCE_CHECK.md", "REVIEW-01.md", "REVIEW-02.md", "RECONCILIATION.md"):
-            record_source = source.parent.parent / record if source.parent.name == "attempts" else source.parent / record
-            if record_source.is_file():
-                shutil.copy2(record_source, output / "pieces" / str(entry["slug"]) / record)
         output_base = (output / Path(str(entry["pdf_url"]))).with_suffix("")
         result = subprocess.run(
             [

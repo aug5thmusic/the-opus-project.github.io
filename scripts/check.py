@@ -36,7 +36,7 @@ def load_metadata(path: Path) -> dict[str, object]:
     if not isinstance(data, dict):
         fail(f"{path.relative_to(ROOT)}: root must be an object")
     missing = REQUIRED - data.keys()
-    extra = data.keys() - (REQUIRED | {"withdrawn", "source_scope"})
+    extra = data.keys() - (REQUIRED | {"withdrawn"})
     if missing or extra:
         fail(
             f"{path.relative_to(ROOT)}: schema mismatch; "
@@ -46,8 +46,6 @@ def load_metadata(path: Path) -> dict[str, object]:
         value = data[key]
         if not isinstance(value, str) or not value.strip():
             fail(f"{path.relative_to(ROOT)}: {key} must be a non-empty string")
-    if "source_scope" in data and (not isinstance(data["source_scope"], str) or not data["source_scope"].strip()):
-        fail(f"{path.relative_to(ROOT)}: source_scope must be a non-empty string")
     if data["license"] != "CC0 1.0":
         fail(f"{path.relative_to(ROOT)}: project transcriptions must be CC0 1.0")
     if data["slug"] != path.parent.name:
@@ -132,11 +130,8 @@ def expected_catalog() -> tuple[dict[str, object], list[Path]]:
                 "pdf_url": str(Path(current_relative).with_suffix(".pdf")),
                 "source_page": data["source_page"],
                 "source_pdf": data["source_pdf"],
-                "source_scope": data.get("source_scope", ""),
                 "crosscheck_name": data["crosscheck_name"],
                 "crosscheck_url": data["crosscheck_url"],
-                "source_sha256": data["source_sha256"],
-                "lilypond_sha256": hashlib.sha256(current_source.read_bytes()).hexdigest(),
             }
         )
     entries.sort(
