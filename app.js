@@ -2,6 +2,13 @@ const catalogNode = document.querySelector('[data-catalog]');
 const searchNode = document.querySelector('[data-search]');
 let scores = [];
 
+function scoreUrl(path, score) {
+  const url = new URL(path, window.location.href);
+  const revision = score.viewer_revision || score.review_revision || score.lilypond_sha256;
+  if (revision) url.searchParams.set('revision', revision);
+  return url.href;
+}
+
 function addText(parent, tag, className, text) {
   const node = document.createElement(tag);
   node.className = className;
@@ -39,17 +46,19 @@ function render(query = '') {
     addText(row, 'p', 'catalog-meta', score.catalogue);
     const status = score.verified_by
       ? 'Human verified'
-      : score.step === 3
-        ? 'Needs proofreading'
-        : `Step ${score.step}/3`;
+      : score.draft
+        ? 'Unmerged review draft'
+        : score.step === 3
+          ? 'Needs proofreading'
+          : `Step ${score.step}/3`;
     addText(row, 'span', 'badge', status);
 
     const links = document.createElement('div');
     links.className = 'score-links';
     const lilypond = addText(links, 'a', '', 'LilyPond');
-    lilypond.href = score.lilypond_url;
+    lilypond.href = scoreUrl(score.lilypond_url, score);
     const pdf = addText(links, 'a', '', 'PDF');
-    pdf.href = score.pdf_url;
+    pdf.href = scoreUrl(score.pdf_url, score);
     const compare = addText(links, 'a', '', 'Compare PDFs');
     compare.href = `proofread.html?piece=${encodeURIComponent(score.slug)}`;
     row.append(links);
@@ -57,7 +66,7 @@ function render(query = '') {
   }
 }
 
-fetch('catalog.json')
+fetch('catalog.json', {cache: 'no-cache'})
   .then((response) => {
     if (!response.ok) throw new Error('HTTP ' + response.status);
     return response.json();

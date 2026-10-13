@@ -4,11 +4,14 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      review_pr:
+        description: 'Score PR to preview (blank follows open seed PR #3; 0 builds main only)'
+        required: false
+        type: string
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
   group: pages
@@ -17,14 +20,69 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Resolve score review
+        id: review
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OPUS_REQUESTED_PR: ${{ inputs.review_pr }}
+        run: |
+          score_pr="${OPUS_REQUESTED_PR:-3}"
+          if [ "$score_pr" = "0" ]; then
+            exit 0
+          fi
+          if ! [[ "$score_pr" =~ ^[1-9][0-9]*$ ]]; then
+            echo 'Review PR must be a positive number, or 0 for main only.' >&2
+            exit 1
+          fi
+          review_state="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$score_pr" --jq '.state')"
+          if [ -z "$OPUS_REQUESTED_PR" ] && [ "$review_state" != "open" ]; then
+            exit 0
+          fi
+          score_revision="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$score_pr" --jq '.head.sha')"
+          if ! [[ "$score_revision" =~ ^[0-9a-f]{40}$ ]]; then
+            echo 'Invalid score revision.' >&2
+            exit 1
+          fi
+          echo "review_pr=$score_pr" >> "$GITHUB_OUTPUT"
+          echo "score_revision=$score_revision" >> "$GITHUB_OUTPUT"
+      - name: Read candidate notation and metadata
+        if: steps.review.outputs.review_pr != ''
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.review.outputs.score_revision }}
+          path: .build/score-candidate
+          sparse-checkout: pieces
+          persist-credentials: false
+      - name: Stage candidate scores
+        if: steps.review.outputs.review_pr != ''
+        run: |
+          mv pieces .build/base-pieces
+          cp -a .build/score-candidate/pieces pieces
       - name: Install LilyPond
         run: sudo apt-get update && sudo apt-get install --yes lilypond
       - name: Validate repository
         run: python3 scripts/check.py --write
       - name: Build catalog, sources, and PDFs
-        run: python3 scripts/build_site.py _site
+        env:
+          OPUS_REVIEW_PR: ${{ steps.review.outputs.review_pr }}
+          OPUS_SCORE_REVISION: ${{ steps.review.outputs.score_revision }}
+        run: |
+          if [ -n "$OPUS_REVIEW_PR" ]; then
+            python3 scripts/build_site.py _site --review-pr "$OPUS_REVIEW_PR" --review-revision "$GITHUB_SHA" --score-revision "$OPUS_SCORE_REVISION"
+          else
+            if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+              echo 'Non-main deployments must identify their review PR.' >&2
+              exit 1
+            fi
+            python3 scripts/build_site.py _site
+          fi
       - if: github.event.repository.private == false
         uses: actions/configure-pages@v5
       - if: github.event.repository.private == false
@@ -38,6 +96,9 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
     needs: build
     steps:
       - name: Deploy GitHub Pages

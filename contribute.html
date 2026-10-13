@@ -3,9 +3,10 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Contribute a LilyPond transcription to The OPUS Project with an AI coding agent.">
+  <meta name="description" content="Help OPUS by running a transcription agent or comparing a draft with its printed source. Report the model, configuration and review coverage.">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <title>Contribute — The OPUS Project</title>
-  <link rel="stylesheet" href="styles.css?v=2">
+  <link rel="stylesheet" href="styles.css?v=6">
 </head>
 <body>
   <header class="site-header">
@@ -15,57 +16,44 @@
         <a href="./#scores">Scores</a>
         <a href="about.html">About</a>
         <a href="contribute.html" aria-current="page">Contribute</a>
-        <a href="https://github.com/dhruv9saini/the-opus-project">GitHub</a>
+        <a href="https://github.com/the-opus-project/the-opus-project.github.io">GitHub</a>
       </nav>
     </div>
   </header>
 
   <main>
     <section class="intro" aria-labelledby="page-title">
-      <h1 id="page-title">Contribute a score</h1>
-      <p>Choose a piece and let an AI coding agent do the notation work.</p>
+      <h1 id="page-title">Contribute</h1>
+      <p>Run an agent or help proofread.</p>
     </section>
 
     <section class="panel" aria-labelledby="start-title">
-      <div class="panel-heading"><h2 id="start-title">Get started</h2></div>
+      <div class="panel-heading"><h2 id="start-title">Run an agent</h2></div>
       <div class="panel-body prose">
-        <ol>
-          <li>Choose a printed, public-domain edition from IMSLP or another reliable library. Do not use a handwritten manuscript.</li>
-          <li>Clone the repository.</li>
-        </ol>
-        <div class="command"><code>git clone https://github.com/dhruv9saini/the-opus-project.git</code></div>
-        <ol start="3">
-          <li>Open the repository in Codex, Claude Code, or another coding agent and ask it to transcribe a specific work—or simply ask it to help The OPUS Project until your usage runs out.</li>
-          <li>Let the agent follow <code>AGENTS.md</code>, compile the LilyPond, compare every page with the scan, make targeted corrections, and open a pull request.</li>
-        </ol>
-      </div>
-    </section>
-
-    <section class="panel" aria-labelledby="steps-title">
-      <div class="panel-heading"><h2 id="steps-title">Three agent runs, then a human check</h2></div>
-      <div class="panel-body prose">
-        <p>Steps 1 and 2 are independent transcriptions by different agents. Neither reads the other's work before submitting its own. Each run needs an initial encoding and at least one targeted correction pass after inspecting the render; a third validation pass is preferred.</p>
-        <p>Agents must read the printed edition visually and enter LilyPond directly. Optical music recognition, OCR-to-score tools, MusicXML or MIDI conversion, and existing digital transcriptions are not allowed.</p>
-        <p>At Step 3, a third agent compares both LilyPond files with the printed edition, resolves disagreements, and produces <code>score.ly</code>. It remains marked “Needs proofreading” until a human checks it.</p>
+        <p>Clone the repository and open it in a coding agent.</p>
+        <div class="command"><code>git clone https://github.com/the-opus-project/the-opus-project.github.io.git</code></div>
+        <div class="command"><code>Work on a useful incomplete score in The OPUS Project.</code></div>
+        <p>The agent follows <a href="https://github.com/the-opus-project/the-opus-project.github.io/blob/main/AGENTS.md">AGENTS.md</a>, reads the print visually, compiles its work, and compares the render with the source. Audiveris, automated score recognition, conversion and borrowed digital notes must never supply the music.</p>
+        <p>Report each run’s exact provider/model ID, agent/client version, reasoning effort, other exposed settings and relevant overrides. Write <code>not exposed</code> for unavailable settings. Do not guess.</p>
       </div>
     </section>
 
     <section class="panel" aria-labelledby="proofread-title">
-      <div class="panel-heading"><h2 id="proofread-title">Proofread without cloning</h2></div>
+      <div class="panel-heading"><h2 id="proofread-title">Check a score</h2></div>
       <div class="panel-body prose">
-        <p>Choose a work in the <a href="./#scores">catalog</a> and open <em>Compare PDFs</em>. The printed source and rendered transcription appear together, with links to open either PDF in its own tab. Compare pitches, rhythm, markings, and text across the whole piece.</p>
-        <p>If you find an error—or finish a full check—write in the discussion on that page. Give the source page and measure (or system and staff), the difference you see, and the revision checked. A maintainer records human verification only after reviewing complete coverage and any corrections. Viewing the PDFs does not require a GitHub account; posting uses GitHub sign-in.</p>
+        <p>Open <a href="proofread.html">Compare PDFs</a>. Zoom and compare the print with the transcription, bar by bar, on both staves. Check notes, durations and every printed mark. You need to read music; no clone or notation software is required.</p>
+        <p>Use <em>Report findings on GitHub</em> to report a difference or completed coverage. Give the page, system, bar, staff and beat, what each score shows, and the displayed score hash. The form fills in the source and hash. Partial checks are welcome; complete human coverage is required for verification.</p>
+        <p>Reading is open. Posting requires GitHub sign-in. Corrections are rebuilt and rechecked by a human.</p>
       </div>
     </section>
 
     <section class="panel" aria-labelledby="pr-title">
-      <div class="panel-heading"><h2 id="pr-title">Pull request details</h2></div>
+      <div class="panel-heading"><h2 id="pr-title">Submit the record</h2></div>
       <div class="panel-body prose">
-        <p>Every transcription pull request must identify its step, the exact model, and the printed source:</p>
-        <div class="command"><code>Step: 1/3<br>Model: provider/exact-model-id<br>Source: https://example.org/printed-edition</code></div>
-        <p>A human verification pull request instead identifies the proofreader with <code>Review: human</code> and <code>Proofreader: @github-name</code>, plus the printed source URL.</p>
-        <p>Also state the scope, LilyPond version, pages compared, correction pass, unresolved readings, and suspected source mistakes. The checks compile every score, verify the metadata and catalog, and reject a transcription pull request when the provenance annotations are missing. A merge rebuilds the site.</p>
-        <p><a href="https://github.com/dhruv9saini/the-opus-project/blob/main/HANDBOOK.md">Read the handbook</a> · <a href="https://github.com/dhruv9saini/the-opus-project">Open the repository on GitHub</a></p>
+        <p>Transcription PRs require these annotations. CI checks that the model and configuration are reported.</p>
+        <div class="command"><code>Step: 1/3<br>Model: provider/exact-model-id<br>Configuration: client/version; reasoning effort; other exposed settings<br>Source: https://example.org/printed-edition</code></div>
+        <p>Human-only verification uses <code>Review: human</code>, <code>Proofreader: @github-name</code>, the source, full coverage and an exact score revision.</p>
+        <p><a href="https://github.com/the-opus-project/the-opus-project.github.io/blob/main/.github/pull_request_template.md">PR template</a> · <a href="https://github.com/the-opus-project/the-opus-project.github.io/blob/main/HANDBOOK.md">Handbook</a></p>
       </div>
     </section>
   </main>

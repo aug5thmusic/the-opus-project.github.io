@@ -1,0 +1,24 @@
+# Independent Step 2 self-review
+
+Model: `openai/gpt-6.1-sol`; reasoning effort `xhigh`. LilyPond source declares 2.24.3 for deployment compatibility; local compiler is 2.26.0. Final compilation completed without warnings, using the project font configuration. Final attempt SHA-256: `d1b1f3b122dde896678dcdcdc5862e6bb675ff4de1441898a6b73f2b7e7f10fd`.
+
+Sole musical source: the printed first leaf of [LOC2014568419](https://tile.loc.gov/storage-services/public/music/musm1a1-10161/musm1a1-10161.pdf#page=1), *The Favorite Vienna Waltz*, Philadelphia: G. Willig's Musical Magazine. Whole source PDF SHA-256: `e9f9985beaaf9c3c0c5ea9d51b6c81f5df85eb358f57bb88ae3b24dba6016225`.
+
+The transcription covers the complete music on PDF page 1, all five printed grand-staff systems, both hands, through the final second ending and D.C. The printed systems contain 6, 7, 7, 8 and 7 written units respectively; the last two systems include incomplete ending/pickup units. Numbering counts those written units, giving measures 1–35 here. No music from a prior attempt, its review, or another digital transcription was read before `02.ly` was finalized. Printed-source PDF rendering and cropping were the only image operations. No OCR, OMR, recognition or musical conversion supplied notes.
+
+Pass 1 independently encoded pitches, rhythm, rests, both clefs, the B-flat to E-flat key change, turns, grace notes, sustained lower right-hand voices, repeat signs, both pairs of endings, Fine and D.C. The first compile identified an unattached D.C. label, which was attached to the final chord.
+
+Pass 2 compared the actual render with the whole page, then enlarged source crops. It corrected the left hand's middle eighth in measures 30–32 from F3 to G3 after checking its position between the A3 and F3 staff lines. It moved the visible articulation marks to their source sides and supplied a custom end-of-line barline definition so the final printed repeat dots remain visible on **both** sides. An ordinary combined-repeat barline would suppress the right dots at the end of the score. All changes were recompiled.
+
+Pass 3 compared the final render with all five source systems, measures 1–6, 7–13, 14–20, 21–28 and 29–35. Particular checks included the low initial B-flat and left-hand B-flat octave; the printed B-natural in measure 10; right-hand grace notes and separate lower voice in measures 19 and 23; the varying ending/pickup durations in measures 24–26 and 34–35; and the left hand in measures 27–33. Normal bars fill 3/8, while the literal printed incomplete units are encoded with explicit partial durations. Source system groupings are retained.
+
+Source observations and readings for reconciliation:
+
+- **Needs source clarification:** PDF page 1, system 3, final measure (20), left-hand final eighth: a short horizontal dark mark appears above the note. This attempt provisionally represents it as an upward tenuto. It could be a printing defect; a third reviewer should decide from the printed scan rather than accept this interpretation solely because it compiles.
+- **Needs source clarification:** PDF page 1, system 5, second measure (30), right hand first note of the final sixteenth pair and left hand final eighth: isolated dark dots appear below the right-hand beam and above the left-hand note. This attempt provisionally includes staccato on those notes. Their identification as printed articulation versus scan/ink specks needs the third review.
+- **Apparent printed repeat irregularity, reproduced:** the final first ending (34) ends with a plain double bar; the second ending (35) ends with repeat dots on both sides of the double bar, followed by D.C. The earlier pair of endings uses a repeat bar after the first ending. This attempt preserves the final pair's literal barlines instead of normalizing them to a modern repeat interpretation.
+- The arcs above the numerals 1 and 2 are ending labels, not note-to-note slurs. They are represented as modern volta brackets. Pencil check marks, finger-like numerals and other handwritten annotations are not part of the printed musical text and are excluded.
+
+There are no printed dynamics, tempo numbers, lyrics or pedal instructions. No playback file is emitted: the literal ending/repeat anomaly needs a documented interpretation before reliable playback can be claimed. Decorative title lettering and publisher address are represented by the modern header and provenance rather than a facsimile page design. The scan, rendered PDF and images remain outside the repository in `/home/d/opus-work/vienna-step2/`.
+
+This is an independent agent transcription with self-review, not human verification. Third-agent reconciliation must resolve the three provisional articulation readings and preserve or document the printed repeat anomaly before marking Step 3 complete. Repository-wide catalog regeneration and full checks are coordinated by the root agent.

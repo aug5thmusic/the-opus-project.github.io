@@ -38,13 +38,14 @@ def main() -> int:
     agent = (
         re.search(r"(?m)^Step: [1-3]/3\s*$", body)
         and re.search(r"(?m)^Model: (?!provider/exact-model-id\s*$).+\S\s*$", body)
+        and re.search(r"(?m)^Configuration: (?!\[[^\n]*\]\s*$)\S[^\r\n]*$", body)
     )
     human = (
         re.search(r"(?m)^Review: human\s*$", body)
         and re.search(r"(?m)^Proofreader: @(?!github-username\s*$)[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?\s*$", body)
     )
     if not source or not (agent or human):
-        print("error: score pull request needs Source and either Step/Model or Review/Proofreader annotations", file=sys.stderr)
+        print("error: score pull request needs Source and either Step/Model/Configuration or Review/Proofreader annotations", file=sys.stderr)
         return 1
     print("pull-request score provenance is present")
     return 0

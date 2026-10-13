@@ -1,0 +1,15 @@
+# Step 1 self-review
+
+Model: `openai/gpt-6.1-sol`, reasoning effort `xhigh`. Source and scope: the complete 16-bar *2nd Recreation (Waltz)*, bottom two systems of printed page 23 / PDF page 25, [LOC2023842814](https://tile.loc.gov/storage-services/public/music/mussm-sm1882-03915/mussm-sm1882-03915.pdf#page=25). Local compiler: LilyPond 2.26.0; the source declares 2.24.3 for deployment compatibility. The final render uses the project font configuration.
+
+This attempt was entered directly from the printed scan. No musical contents of another attempt or existing encoding were consulted. The source page was rendered at 4000 pixels high; each system and several close crops were read visually.
+
+Pass 1 encoded all 16 measures, both staves, key and time signatures, rests, slurs, dynamics, three hairpins, the Waltz direction, final barline, and every printed finger indication. The old fingering convention is retained literally: `x` is the thumb and the digits run 1–4. The left-hand two-note finger indications are stacked as printed. The volume credits a compiler, while the miniature itself has no author credit; the added header makes that limitation explicit.
+
+Pass 2 compared the compiled PDF with both complete printed systems and targeted enlarged crops. It corrected right-hand measure 10's initial half note from F-natural to F-sharp: the source has no accidental, so its G-major key signature applies. It also fixed missing thumb `x` glyphs by using text-font markup and reduced the stack spacing to keep the historical finger pairs together. The corrected file was recompiled successfully with no warnings.
+
+Pass 3 compared the final render with the source measure by measure: measures 1–8 in the first system and 9–16 in the second. This included the close right-hand readings in measures 4, 10, 12 and 14; the left-hand adjacent C–D chord in measure 3; and the final three-note left-hand chord. All note and rest durations sum to 3/4 in each measure. The source has no repeats, pedal, lyrics or extra articulation marks in this miniature. The source's six phrase slurs, `p`, `f`, final `p`, crescendo spans and diminuendo span are included. There is no source page turn inside the scope.
+
+The final Step 1 PDF and MIDI were generated outside the repository. MIDI uses an explicitly editorial playback speed of quarter note = 120 because the printed page supplies no metronome number; this is not a claimed source marking. The modern render retains the source's 8 + 8 measure system grouping, but source typeface, page whitespace and compiler-added header are not facsimile layout.
+
+Unresolved musical readings: none in this Step 1 review. Suspected printed musical errors: none identified. Composer identity remains unknown. Compilation and this agent review do not constitute independent reconciliation or human verification. Two further independent agent steps and human proofreading remain required. Repository-wide metadata/catalog checks are coordinated by the root agent to avoid concurrent catalog changes.

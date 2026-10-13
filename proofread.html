@@ -4,8 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Compare an original public-domain score with its LilyPond transcription.">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <title>Proofread a score — The OPUS Project</title>
-  <link rel="stylesheet" href="styles.css?v=3">
+  <link rel="stylesheet" href="styles.css?v=6">
 </head>
 <body class="comparison-page">
   <header class="site-header">
@@ -15,7 +16,7 @@
         <a href="./#scores">Scores</a>
         <a href="about.html">About</a>
         <a href="contribute.html">Contribute</a>
-        <a href="https://github.com/dhruv9saini/the-opus-project">GitHub</a>
+        <a href="https://github.com/the-opus-project/the-opus-project.github.io">GitHub</a>
       </nav>
     </div>
   </header>
@@ -24,7 +25,8 @@
     <section class="intro" aria-labelledby="page-title">
       <h1 id="page-title" data-title>Compare PDFs</h1>
       <p data-status>Loading score…</p>
-      <p>Compare the printed source with the rendered transcription. Open either PDF in its own tab to zoom in; a higher-resolution scan is linked when available.</p>
+      <p data-scope hidden></p>
+      <p>Compare the print with the transcription, bar by bar and staff by staff. Open either PDF in its own tab to zoom.</p>
       <p data-message role="status"></p>
       <ul data-queue hidden></ul>
     </section>
@@ -37,7 +39,7 @@
       </section>
       <section class="compare-panel" aria-labelledby="rendered-title">
         <h2 id="rendered-title">LilyPond transcription</h2>
-        <p><a data-rendered-link target="_blank" rel="noopener noreferrer">Open rendered PDF</a> · <a data-lilypond-link>View LilyPond</a></p>
+        <p><a data-rendered-link target="_blank" rel="noopener noreferrer">Open rendered PDF</a> · <a data-lilypond-link>View LilyPond</a> · <a data-edition-link>Edition record</a> · <a data-review-link>Review notes</a></p>
         <iframe class="pdf-frame" data-rendered-frame title="Rendered transcription PDF"></iframe>
       </section>
     </div>
@@ -45,13 +47,14 @@
     <section class="panel" data-report hidden aria-labelledby="report-title">
       <div class="panel-heading"><h2 id="report-title">Report what you found</h2></div>
       <div class="panel-body">
-        <p>Check the whole piece, including pitches, rhythm, dynamics, articulations, pedal marks, and text. If the scan and render differ, report enough to locate the problem: page and measure or system, what each shows, and the revision checked. For a full check, name every page covered.</p>
-        <p>Reports go to GitHub Discussions. Reading the PDFs is open; posting requires GitHub sign-in. If the form does not load, <a data-feedback target="_blank" rel="noopener noreferrer">open a discussion on GitHub</a>.</p>
-        <div class="giscus" data-discussion></div>
+        <p>Check every note, duration and printed mark. Report the page, system, bar, staff and beat, what each score shows, and your coverage. A full check must cover the entire work at the score hash below.</p>
+        <p class="revision" data-revision></p>
+        <p><a class="report-link" data-feedback target="_blank" rel="noopener noreferrer">Report findings on GitHub</a></p>
+        <p>The form fills in the source and score hash. Reading is open; posting requires GitHub sign-in.</p>
       </div>
     </section>
   </main>
 
-  <script src="proofread.js?v=5" defer></script>
+  <script src="proofread.js?v=8" defer></script>
 </body>
 </html>

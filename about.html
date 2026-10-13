@@ -3,9 +3,10 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="About The OPUS Project, a crowdsourced project to transcribe the world's music with AI.">
+  <meta name="description" content="OPUS makes printed public-domain scores editable through independent agent transcription and human proofreading.">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <title>About — The OPUS Project</title>
-  <link rel="stylesheet" href="styles.css?v=2">
+  <link rel="stylesheet" href="styles.css?v=6">
 </head>
 <body>
   <header class="site-header">
@@ -15,40 +16,31 @@
         <a href="./#scores">Scores</a>
         <a href="about.html" aria-current="page">About</a>
         <a href="contribute.html">Contribute</a>
-        <a href="https://github.com/dhruv9saini/the-opus-project">GitHub</a>
+        <a href="https://github.com/the-opus-project/the-opus-project.github.io">GitHub</a>
       </nav>
     </div>
   </header>
 
   <main>
     <section class="intro" aria-labelledby="page-title">
-      <h1 id="page-title">About The OPUS Project</h1>
+      <h1 id="page-title">About OPUS</h1>
       <p>Open Public-domain Universal Scores.</p>
-      <p>A crowdsourced project to transcribe the world's music with AI.</p>
-    </section>
-
-    <section class="panel" aria-labelledby="project-title">
-      <div class="panel-heading"><h2 id="project-title">The project</h2></div>
-      <div class="panel-body">
-        <p>Many public-domain scores are available only as scans. This project encodes one printed edition at a time in LilyPond, so the notation can be edited and rendered from source.</p>
-        <p>Choose a work, clone the repository, and ask an AI coding agent to transcribe it. A pull request names the scan and pages used, the model, the LilyPond source, and the rendered score.</p>
-      </div>
+      <p>We turn printed public-domain scores into editable LilyPond, following the named edition.</p>
     </section>
 
     <section class="panel" aria-labelledby="review-title">
-      <div class="panel-heading"><h2 id="review-title">How the review works</h2></div>
+      <div class="panel-heading"><h2 id="review-title">Three agents, then a human</h2></div>
       <div class="panel-body">
-        <p>Two agents independently transcribe the same printed score without reading one another's work. Each must compare its render with the source and make at least one targeted correction pass. A third agent reconciles both versions against the scan. A human then checks the complete score.</p>
-        <p>The catalog labels in-progress attempts separately from human verification. A verifier approves a specific revision only after complete review coverage. We reproduce apparent mistakes in the printed source and note them separately from transcription errors.</p>
+        <p>Two agents transcribe the print independently. A third reconciles their attempts against it. A human then compares the complete engraving with the original, bar by bar and staff by staff.</p>
+        <p>Public review drafts are labelled. A score becomes verified only after a human approves every staff and mark at an exact score hash. Compiling does not verify the music.</p>
       </div>
     </section>
 
     <section class="panel" aria-labelledby="archive-title">
-      <div class="panel-heading"><h2 id="archive-title">One open archive</h2></div>
+      <div class="panel-heading"><h2 id="archive-title">Source and records</h2></div>
       <div class="panel-body">
-        <p>LilyPond is the canonical source. Rendered PDFs and any future SVG, MIDI, or MusicXML files derive from a recorded revision; their validation is separate from verification of the notation. When a contribution is merged, the catalog is rebuilt from the repository.</p>
-        <p>To help proofread, open a work's <em>Compare PDFs</em> link in the catalog. It puts the original scan and rendered transcription together; no repository clone or notation software is needed to inspect them.</p>
-        <p><a href="contribute.html">How to contribute</a> · <a href="https://github.com/dhruv9saini/the-opus-project/blob/main/HANDBOOK.md">Project handbook</a> · <a href="https://github.com/dhruv9saini/the-opus-project">GitHub repository</a></p>
+        <p>Each work includes LilyPond, a rendered PDF, and records of its printed source, models and resolved readings. Original project files are CC0-1.0. Linked scans retain their own rights.</p>
+        <p><a href="proofread.html">Compare PDFs</a> · <a href="contribute.html">Contribute</a> · <a href="https://github.com/the-opus-project/the-opus-project.github.io/blob/main/HANDBOOK.md">Handbook</a></p>
       </div>
     </section>
   </main>

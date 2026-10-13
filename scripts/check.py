@@ -116,6 +116,16 @@ def expected_catalog() -> tuple[dict[str, object], list[Path]]:
         if data.get("withdrawn", False):
             continue
         current_relative = current_source.relative_to(ROOT).as_posix()
+        archived_notes = ROOT / "review-notes" / str(data["slug"]) / "RECONCILIATION.md"
+        piece_notes = piece_dir / "RECONCILIATION.md"
+        notes = piece_notes
+        binding_path = archived_notes.with_name("binding.json")
+        if archived_notes.is_file() and binding_path.is_file():
+            binding = json.loads(binding_path.read_text(encoding="utf-8"))
+            current_digest = hashlib.sha256(current_source.read_bytes()).hexdigest()
+            if (binding.get("lilypond_sha256") == current_digest
+                    and binding.get("source_sha256") == data["source_sha256"]):
+                notes = archived_notes
         entries.append(
             {
                 "slug": data["slug"],
@@ -130,8 +140,12 @@ def expected_catalog() -> tuple[dict[str, object], list[Path]]:
                 "pdf_url": str(Path(current_relative).with_suffix(".pdf")),
                 "source_page": data["source_page"],
                 "source_pdf": data["source_pdf"],
+                "source_scope": str(data["source_id"]).partition("| scope:")[2].strip(),
+                "review_notes_url": notes.relative_to(ROOT).as_posix() if notes.is_file() else "",
                 "crosscheck_name": data["crosscheck_name"],
                 "crosscheck_url": data["crosscheck_url"],
+                "source_sha256": data["source_sha256"],
+                "lilypond_sha256": hashlib.sha256(current_source.read_bytes()).hexdigest(),
             }
         )
     entries.sort(

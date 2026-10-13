@@ -22,3 +22,26 @@ jobs:
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PR_BODY: ${{ github.event.pull_request.body }}
         run: python3 scripts/check_pr.py
+      - name: Build PDFs for human review
+        run: |
+          mkdir -p .build
+          python3 scripts/build_site.py .build/review
+          cat > .build/review/REVIEW.txt <<'EOF'
+          This is a pull-request review bundle. It has not been deployed.
+
+          Open the PDFs under pieces/ to inspect the current scores.
+          Each work's metadata.json links its exact printed source PDF.
+          SOURCE_CHECK.md and RECONCILIATION.md document the edition, scope,
+          resolved differences and readings needing a human check.
+
+          Compare every page, staff, note and mark. In your review, identify
+          the pages covered and the LilyPond SHA-256 from catalog.json.
+          Agent reconciliation does not establish human verification.
+          EOF
+      - name: Upload human-review bundle
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: score-review-pr-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
+          path: .build/review
+          if-no-files-found: error
+          retention-days: 14
