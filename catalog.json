@@ -18,6 +18,22 @@
       "crosscheck_url": "https://www.loc.gov/resource/music.musm1a1-10161/?sp=1"
     },
     {
+      "slug": "bonis-melisande-op109",
+      "title": "Mélisande",
+      "composer": "Mel Bonis",
+      "catalogue": "Op. 109",
+      "year": "1925",
+      "instrumentation": "Piano",
+      "step": 3,
+      "verified_by": null,
+      "lilypond_url": "pieces/bonis-melisande-op109/score.ly",
+      "pdf_url": "pieces/bonis-melisande-op109/score.pdf",
+      "source_page": "https://imslp.org/wiki/M%C3%A9lisande,_Op.109_(Bonis,_Mel)",
+      "source_pdf": "https://s9.imslp.org/files/imglnks/usimg/3/39/IMSLP30424-PMLP68553-Bonis_Melisande_piano_2_hands.pdf#page=2",
+      "crosscheck_name": "Bru Zane: printed Leduc edition and numbering discrepancy",
+      "crosscheck_url": "https://www.bruzanemediabase.com/en/exploration/documents/melisande-mel-bonis"
+    },
+    {
       "slug": "dett-in-the-bottoms-honey",
       "title": "Honey — Humoresque",
       "composer": "R. Nathaniel Dett",

@@ -1,0 +1,23 @@
+{
+  "slug": "bonis-melisande-op109",
+  "title": "Mélisande",
+  "composer": "Mel Bonis",
+  "catalogue": "Op. 109",
+  "year": "1925",
+  "instrumentation": "Piano",
+  "license": "CC0 1.0",
+  "source_library": "IMSLP",
+  "source_id": "IMSLP30424 / PMLP68553; Paris: Alphonse Leduc, 1925, plate A.L.16,935 | scope: PDF pages 2–4, printed pages 1–3; complete Mélisande, 60 written measures in 17 systems, both staves; cover No. 5, music header No. 4 retained",
+  "source_page": "https://imslp.org/wiki/M%C3%A9lisande,_Op.109_(Bonis,_Mel)",
+  "source_pdf": "https://s9.imslp.org/files/imglnks/usimg/3/39/IMSLP30424-PMLP68553-Bonis_Melisande_piano_2_hands.pdf#page=2",
+  "source_sha256": "2ce22cd38a5e936bdaed69723e5ae5400e1432dfac90a77b07df515563beed06",
+  "crosscheck_name": "Bru Zane: printed Leduc edition and numbering discrepancy",
+  "crosscheck_url": "https://www.bruzanemediabase.com/en/exploration/documents/melisande-mel-bonis",
+  "step": 3,
+  "models": [
+    "openai/gpt-6.1-sol",
+    "openai/gpt-6.1-sol",
+    "openai/gpt-6.1-sol"
+  ],
+  "verified_by": null
+}
