@@ -1,0 +1,23 @@
+{
+  "slug": "carreno-le-sommeil-de-lenfant-op35",
+  "title": "Le sommeil de l’enfant — Berceuse",
+  "composer": "Teresa Carreño",
+  "catalogue": "Op. 35",
+  "year": "1872",
+  "instrumentation": "Piano",
+  "license": "CC0 1.0",
+  "source_library": "IMSLP / Bibliothèque nationale de France",
+  "source_id": "IMSLP48626 / PMLP102896; Paris: Heugel, n.d. [1872], plate H.4875 | scope: PDF pages 1–5, printed pages 1–5; complete Berceuse, both staves; 106 measures in 24 systems",
+  "source_page": "https://imslp.org/wiki/Le_sommeil_de_l%27enfant,_Op.35_(Carre%C3%B1o,_Teresa)",
+  "source_pdf": "https://s9.imslp.org/files/imglnks/usimg/1/17/IMSLP48626-PMLP102896-Carreno-berceuse-op_35.pdf#page=1",
+  "source_sha256": "130fb6b2e46e5de30097f7966f2d64b54cf1eb83af850a5b33ab511038854550",
+  "crosscheck_name": "Higher-resolution Heugel print (BNE; music PDF pages 3–7)",
+  "crosscheck_url": "https://s9.imslp.org/files/imglnks/usimg/6/69/IMSLP326137-PMLP102896-Carreno_-_Sommeil_de_l%27enfant_-_pf-BDH.pdf#page=3",
+  "step": 3,
+  "models": [
+    "openai/gpt-6.1-sol",
+    "openai/gpt-6.1-sol",
+    "openai/gpt-6.1-sol"
+  ],
+  "verified_by": null
+}

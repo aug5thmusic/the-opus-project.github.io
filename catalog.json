@@ -18,6 +18,38 @@
       "crosscheck_url": "https://www.loc.gov/resource/music.musm1a1-10161/?sp=1"
     },
     {
+      "slug": "dett-in-the-bottoms-honey",
+      "title": "Honey — Humoresque",
+      "composer": "R. Nathaniel Dett",
+      "catalogue": "In the Bottoms, No. 3 (IRD 4)",
+      "year": "1913",
+      "instrumentation": "Piano",
+      "step": 3,
+      "verified_by": null,
+      "lilypond_url": "pieces/dett-in-the-bottoms-honey/score.ly",
+      "pdf_url": "pieces/dett-in-the-bottoms-honey/score.pdf",
+      "source_page": "https://imslp.org/wiki/In_the_Bottoms_(Dett,_Robert_Nathaniel)",
+      "source_pdf": "https://vmirror.imslp.org/files/imglnks/usimg/c/c8/IMSLP64680-PMLP131763-Dett_In_the_Bottoms.pdf#page=10",
+      "crosscheck_name": "Sibley Music Library: Dett collection and edition inventory",
+      "crosscheck_url": "https://www.esm.rochester.edu/sibley/specialcollections/findingaids/dett/"
+    },
+    {
+      "slug": "carreno-le-sommeil-de-lenfant-op35",
+      "title": "Le sommeil de l’enfant — Berceuse",
+      "composer": "Teresa Carreño",
+      "catalogue": "Op. 35",
+      "year": "1872",
+      "instrumentation": "Piano",
+      "step": 3,
+      "verified_by": null,
+      "lilypond_url": "pieces/carreno-le-sommeil-de-lenfant-op35/score.ly",
+      "pdf_url": "pieces/carreno-le-sommeil-de-lenfant-op35/score.pdf",
+      "source_page": "https://imslp.org/wiki/Le_sommeil_de_l%27enfant,_Op.35_(Carre%C3%B1o,_Teresa)",
+      "source_pdf": "https://s9.imslp.org/files/imglnks/usimg/1/17/IMSLP48626-PMLP102896-Carreno-berceuse-op_35.pdf#page=1",
+      "crosscheck_name": "Higher-resolution Heugel print (BNE; music PDF pages 3–7)",
+      "crosscheck_url": "https://s9.imslp.org/files/imglnks/usimg/6/69/IMSLP326137-PMLP102896-Carreno_-_Sommeil_de_l%27enfant_-_pf-BDH.pdf#page=3"
+    },
+    {
       "slug": "rollinson-excelsior-2nd-recreation",
       "title": "2nd Recreation (Waltz)",
       "composer": "Uncredited; T. H. Rollinson, editor/compiler",

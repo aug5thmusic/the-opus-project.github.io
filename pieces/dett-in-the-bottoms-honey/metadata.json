@@ -1,0 +1,23 @@
+{
+  "slug": "dett-in-the-bottoms-honey",
+  "title": "Honey — Humoresque",
+  "composer": "R. Nathaniel Dett",
+  "catalogue": "In the Bottoms, No. 3 (IRD 4)",
+  "year": "1913",
+  "instrumentation": "Piano",
+  "license": "CC0 1.0",
+  "source_library": "IMSLP",
+  "source_id": "IMSLP64680 / PMLP131763; Clayton F. Summy, copyright 1913, plate C.F.S.Co.1465 (later printing date unknown) | scope: PDF pages 10–11, printed pages 52–53; complete No. 3, Honey — Humoresque; 48 measures, 10 systems, both staves",
+  "source_page": "https://imslp.org/wiki/In_the_Bottoms_(Dett,_Robert_Nathaniel)",
+  "source_pdf": "https://vmirror.imslp.org/files/imglnks/usimg/c/c8/IMSLP64680-PMLP131763-Dett_In_the_Bottoms.pdf#page=10",
+  "source_sha256": "f4da99624c3384f6086ef04b014b720b0a25b05997801512cd3f9b05a5657698",
+  "crosscheck_name": "Sibley Music Library: Dett collection and edition inventory",
+  "crosscheck_url": "https://www.esm.rochester.edu/sibley/specialcollections/findingaids/dett/",
+  "step": 3,
+  "models": [
+    "openai/gpt-6.1-sol",
+    "openai/gpt-6.1-sol",
+    "openai/gpt-6.1-sol"
+  ],
+  "verified_by": null
+}
