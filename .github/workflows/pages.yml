@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       review_pr:
-        description: 'Score PR to preview (blank follows open seed PR #3; 0 builds main only)'
+        description: 'Score PR to preview (blank follows open repertoire PR #5; 0 builds main only)'
         required: false
         type: string
 
@@ -33,7 +33,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           OPUS_REQUESTED_PR: ${{ inputs.review_pr }}
         run: |
-          score_pr="${OPUS_REQUESTED_PR:-3}"
+          score_pr="${OPUS_REQUESTED_PR:-5}"
           if [ "$score_pr" = "0" ]; then
             exit 0
           fi
