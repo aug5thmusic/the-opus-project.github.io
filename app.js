@@ -6,6 +6,7 @@ function scoreUrl(path, score) {
   const url = new URL(path, window.location.href);
   const revision = score.viewer_revision || score.review_revision || score.lilypond_sha256;
   if (revision) url.searchParams.set('revision', revision);
+  if (score.review_revision) url.searchParams.set('score_revision', score.review_revision);
   return url.href;
 }
 
