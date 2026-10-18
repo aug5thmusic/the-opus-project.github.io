@@ -44,8 +44,8 @@ Install LilyPond and run:
 python3 scripts/check.py --write
 ```
 
-Validation and site builds treat LilyPond warnings as errors, including failed
-bar checks and unterminated ties. Fix the reported notation or engraving problem
+Validation and site builds fail on LilyPond warnings and programming errors,
+including failed bar checks and unterminated ties. Fix the notation or engraving problem
 before submitting. A clean build still requires visual comparison with the print.
 
 To exercise the validator and site builder with valid and malformed scores using

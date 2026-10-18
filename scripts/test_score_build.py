@@ -24,6 +24,9 @@ BAD_BAR = r'''\version "2.24.3"
 BAD_TIE = r'''\version "2.24.3"
 \score { \relative c' { \time 4/4 c1~ | d1 | } }
 '''
+BAD_PROPERTY = r'''\version "2.24.3"
+\score { { \time 4/4 \set Timing.measureLength = #"invalid" c'1 | } }
+'''
 
 
 def run(arguments: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
@@ -86,14 +89,18 @@ def main() -> int:
         for label, music, diagnostic in (
             ("bar", BAD_BAR, r"bar ?check failed"),
             ("tie", BAD_TIE, "unterminated tie"),
+            (
+                "property", BAD_PROPERTY,
+                r"(?:type check for|the property).*measureLength.*(?:failed|must be of type)",
+            ),
         ):
             source.write_text(music, encoding="utf-8")
 
-            # Prove that this is a warning-only failure in ordinary LilyPond,
+            # Prove that this diagnostic does not fail ordinary LilyPond,
             # rather than a syntax error or an unrelated fixture prerequisite.
             raw = run([lilypond, "-o", f"ordinary-{label}", str(source)], repo)
-            require(raw.returncode == 0, f"{label}: fixture is not warning-only", raw)
-            require(re.search(diagnostic, raw.stderr) is not None, f"{label}: expected warning was not emitted", raw)
+            require(raw.returncode == 0, f"{label}: fixture already fails ordinary LilyPond", raw)
+            require(re.search(diagnostic, raw.stderr) is not None, f"{label}: expected diagnostic was not emitted", raw)
 
             for script, arguments, success_marker in (
                 ("check.py", [], "compiled pieces/fixture/attempts/01.ly"),
@@ -104,7 +111,7 @@ def main() -> int:
                 require(re.search(diagnostic, result.stderr) is not None, f"{script} failed for another reason", result)
                 require(success_marker not in result.stdout, f"{script} claimed success", result)
 
-    print("score-build fixtures: valid=pass bar_warning=rejected tie_warning=rejected")
+    print("score-build fixtures: valid=pass bar_warning=rejected tie_warning=rejected property_error=rejected")
     return 0
 
 

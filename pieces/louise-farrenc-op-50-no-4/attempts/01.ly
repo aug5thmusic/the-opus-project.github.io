@@ -1,4 +1,11 @@
 \version "2.24.3"
+
+% LilyPond 2.24 requires a Moment; 2.26 requires a rational measure length.
+% Query the property's type so this downloadable file works with either.
+#(define (opus-measure-length fraction)
+   (if ((object-property 'measureLength 'translation-type?) fraction)
+       fraction
+       (ly:make-moment (numerator fraction) (denominator fraction))))
 \header {
   title = "Étude No. 4"
   subtitle = "Pour les batteries avec une partie soutenue"
@@ -28,11 +35,11 @@ rightHand = \fixed c' {
   b4.-3 \acciaccatura d'8 c'4.\mf |
   b4. a4. |
   g4.-1 fis4.-3 |
-  \set Timing.measureLength = #1/2
+  \set Timing.measureLength = #(opus-measure-length 1/2)
   e4.-2 r8 \bar ":|:"
-  \set Timing.measureLength = #1/4
+  \set Timing.measureLength = #(opus-measure-length 1/4)
   b8-2 e'8-5 | \break
-  \set Timing.measureLength = #3/4
+  \set Timing.measureLength = #(opus-measure-length 3/4)
   d'4. c'4. |
   a4. fis4-1 a8-3 |
   << { d'4.-5 b4.-5 }
@@ -49,7 +56,7 @@ rightHand = \fixed c' {
      \\ { g'16 c'-2 a c' a c' fis' c' a c' e' b } >> |
   << { e'4. dis'4. }
      \\ { e'16_\markup { \italic "Dim." } a fis a fis a dis' b fis b fis b } >> |
-  \set Timing.measureLength = #1/2
+  \set Timing.measureLength = #(opus-measure-length 1/2)
   << { e'4.~ e'8 }
      \\ { e'16 b g b g b s8 } >> \bar ":|."
 }
@@ -66,12 +73,12 @@ leftHand = \fixed c {
      \\ { dis16-5 fis b fis b fis c-5 e a e a e } >> |
   << { b,4. b,4. }
      \\ { b,16-5 e g e g e b, dis a dis a dis } >> |
-  \set Timing.measureLength = #1/2
+  \set Timing.measureLength = #(opus-measure-length 1/2)
   << { e4. e8 }
      \\ { e16-4 g b g b g s8 } >>
-  \set Timing.measureLength = #1/4
+  \set Timing.measureLength = #(opus-measure-length 1/4)
   r8 r8 |
-  \set Timing.measureLength = #3/4
+  \set Timing.measureLength = #(opus-measure-length 3/4)
   << { fis4. fis4. }
      \\ { fis16 a e' a e' a fis a e' a e' a } >> |
   << { g4. g4. }
@@ -89,7 +96,7 @@ leftHand = \fixed c {
   c'4.-1 b4. |
   a4.~ a4 b8 |
   c'4. b4.-3 |
-  \set Timing.measureLength = #1/2
+  \set Timing.measureLength = #(opus-measure-length 1/2)
   e'4. d8
 }
 

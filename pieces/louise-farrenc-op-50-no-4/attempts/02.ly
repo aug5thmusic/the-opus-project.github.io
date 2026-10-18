@@ -1,5 +1,12 @@
 \version "2.24.3"
 
+% LilyPond 2.24 requires a Moment; 2.26 requires a rational measure length.
+% Query the property's type so this downloadable file works with either.
+#(define (opus-measure-length fraction)
+   (if ((object-property 'measureLength 'translation-type?) fraction)
+       fraction
+       (ly:make-moment (numerator fraction) (denominator fraction))))
+
 % Independent visual transcription of IMSLP #511615, PDF page 6 (printed p. 5).
 % The short bar before the repeat start and the two-eighth pickup make 6/8.
 % The last bar is correspondingly short before the repeat end.
@@ -39,11 +46,11 @@ right = {
   b'4.-3\mf \acciaccatura d''8 c''4. |
   b'4. a'4. |
   g'4.-1 fis'4.-3 |
-  \set Timing.measureLength = #1/2
+  \set Timing.measureLength = #(opus-measure-length 1/2)
   e'4.-2 r8 \bar ".|:"
-  \set Timing.measureLength = #1/4
+  \set Timing.measureLength = #(opus-measure-length 1/4)
   b'8-2 [e''8-5] |
-  \set Timing.measureLength = #3/4
+  \set Timing.measureLength = #(opus-measure-length 3/4)
 
   % 9–10: the rapid figure remains in the bass.
   d''4. c''4. |
@@ -68,7 +75,7 @@ right = {
     fis''16-4 [c'' a' c'' e''-5 b'] |
   e''16-5_\markup \italic "dim." [a' fis' a' fis' a']
     dis''16 [b' fis' b' fis' b'] |
-  \set Timing.measureLength = #1/2
+  \set Timing.measureLength = #(opus-measure-length 1/2)
   e''16 [b' g' b' g' b'] s8 \bar ":|."
 }
 
@@ -79,16 +86,16 @@ rightSustain = {
   g'4. a'4. |
   g'4. fis'4. |
   s2.*3
-  \set Timing.measureLength = #1/2
+  \set Timing.measureLength = #(opus-measure-length 1/2)
   s2
-  \set Timing.measureLength = #1/4
+  \set Timing.measureLength = #(opus-measure-length 1/4)
   s4
-  \set Timing.measureLength = #3/4
+  \set Timing.measureLength = #(opus-measure-length 3/4)
   s2.*8
   e''4. g''4. |
   g''4. fis''4 e''8 |
   e''4. dis''4. |
-  \set Timing.measureLength = #1/2
+  \set Timing.measureLength = #(opus-measure-length 1/2)
   e''4.~ e''8
 }
 
@@ -106,11 +113,11 @@ leftBattery = {
   cis16 [fis b fis b fis] d16 [g d' g d' g] |
   cis16 [fis b fis b fis] cis16 [e a e a e] |
   b,16 [e g e g e] b,16 [dis a dis a dis] |
-  \set Timing.measureLength = #1/2
+  \set Timing.measureLength = #(opus-measure-length 1/2)
   e16 [g b g b g] e8 \bar ".|:"
-  \set Timing.measureLength = #1/4
+  \set Timing.measureLength = #(opus-measure-length 1/4)
   r8 r8 |
-  \set Timing.measureLength = #3/4
+  \set Timing.measureLength = #(opus-measure-length 3/4)
 
   % 9–10: six even sixteenths in each half bar.
   fis16 [a d' a d' a] fis16 [a d' a d' a] |
@@ -130,7 +137,7 @@ leftBattery = {
   c'4.-1 b4. |
   a4.~ a4 b8 |
   c'4. b4. |
-  \set Timing.measureLength = #1/2
+  \set Timing.measureLength = #(opus-measure-length 1/2)
   e'4. d8 \bar ":|."
 }
 
@@ -141,11 +148,11 @@ leftSustain = {
   cis4.-4 d4.-4 |
   cis4.-5 cis4.-5 |
   b,4.-5 b,4. |
-  \set Timing.measureLength = #1/2
+  \set Timing.measureLength = #(opus-measure-length 1/2)
   e4.-4 s8
-  \set Timing.measureLength = #1/4
+  \set Timing.measureLength = #(opus-measure-length 1/4)
   s4
-  \set Timing.measureLength = #3/4
+  \set Timing.measureLength = #(opus-measure-length 3/4)
   fis4.-5 fis4. |
   g4.-4 g4. |
   s2.*2
@@ -154,7 +161,7 @@ leftSustain = {
   e4.-5 fis4.-4 |
   g2. |
   s2.*3
-  \set Timing.measureLength = #1/2
+  \set Timing.measureLength = #(opus-measure-length 1/2)
   s2
 }
 

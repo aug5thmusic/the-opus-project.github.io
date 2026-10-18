@@ -1,5 +1,12 @@
 \version "2.24.3"
 
+% LilyPond 2.24 requires a Moment; 2.26 requires a rational measure length.
+% Query the property's type so this downloadable file works with either.
+#(define (opus-measure-length fraction)
+   (if ((object-property 'measureLength 'translation-type?) fraction)
+       fraction
+       (ly:make-moment (numerator fraction) (denominator fraction))))
+
 % Agent reconciliation candidate, not human verified.
 % Source: IMSLP #511615, PDF page 6, printed page 5, A. L. 5854.
 % Rechecked against BnF A-38757 (same Leduc plate), Commons page 9.
@@ -42,11 +49,11 @@ upperBattery = {
   b'4.-3\mf \acciaccatura d''8 c''4. |
   b'4. a'4. |
   g'4.-1 fis'4.-3 |
-  \set Timing.measureLength = #1/2
+  \set Timing.measureLength = #(opus-measure-length 1/2)
   e'4.-2 r8 \bar ".|:"
-  \set Timing.measureLength = #1/4
+  \set Timing.measureLength = #(opus-measure-length 1/4)
   b'8-2 [e''8-5] | \break
-  \set Timing.measureLength = #3/4
+  \set Timing.measureLength = #(opus-measure-length 3/4)
 
   % Third system, bars 9–12.
   d''4. c''4. |
@@ -69,7 +76,7 @@ upperBattery = {
     fis''16 [c'' a' c'' e'' b'] |
   e''16_\markup { \italic "Dim." } [a' fis' a' fis' a']
     dis''16 [b' fis' b' fis' b'] |
-  \set Timing.measureLength = #1/2
+  \set Timing.measureLength = #(opus-measure-length 1/2)
   e''16 [b' g' b' g' b'] s8 \bar ":|."
 }
 
@@ -81,11 +88,11 @@ upperSustained = {
   g'4.-1 a'4.-1 |
   g'4.-4 s4. |
   s2.*3 |
-  \set Timing.measureLength = #1/2
+  \set Timing.measureLength = #(opus-measure-length 1/2)
   s2
-  \set Timing.measureLength = #1/4
+  \set Timing.measureLength = #(opus-measure-length 1/4)
   s4
-  \set Timing.measureLength = #3/4
+  \set Timing.measureLength = #(opus-measure-length 3/4)
   s2.*2 |
   d''4.-5 c''4.-5 |
   b'4.-5 s4. |
@@ -93,7 +100,7 @@ upperSustained = {
   e''4.-4 g''4.-5 |
   g''4.-5 fis''4-4 e''8-3 |
   e''4.-5 dis''4.-2 |
-  \set Timing.measureLength = #1/2
+  \set Timing.measureLength = #(opus-measure-length 1/2)
   e''4.~ e''8
 }
 
@@ -107,11 +114,11 @@ lowerBattery = {
   dis16-4 [fis b fis b fis] e16-4 [g c' g c' g] |
   dis16-5 [fis b fis b fis] c16-5 [e a e a e] |
   b,16-5 [e g e g e] b,16 [dis a dis a dis] |
-  \set Timing.measureLength = #1/2
+  \set Timing.measureLength = #(opus-measure-length 1/2)
   e16-4 [g b g b g] s8
-  \set Timing.measureLength = #1/4
+  \set Timing.measureLength = #(opus-measure-length 1/4)
   s4
-  \set Timing.measureLength = #3/4
+  \set Timing.measureLength = #(opus-measure-length 3/4)
   fis16-5 [a d' a d' a] fis16 [a d' a d' a] |
   g16 [b d' b d' b] g16 [b d' b d' b] |
   s2.*2 |
@@ -120,7 +127,7 @@ lowerBattery = {
   e16-5 [g c' g c' g] fis16-4 [a c' a c' a] |
   g16 [b d' b d' b] d'16 [b d' b d' b] |
   s2.*3 |
-  \set Timing.measureLength = #1/2
+  \set Timing.measureLength = #(opus-measure-length 1/2)
   s2
 }
 
@@ -135,11 +142,11 @@ lowerSustained = {
   dis4. e4. |
   dis4. c4. |
   b,4. b,4. |
-  \set Timing.measureLength = #1/2
+  \set Timing.measureLength = #(opus-measure-length 1/2)
   e4. e8 \bar ".|:"
-  \set Timing.measureLength = #1/4
+  \set Timing.measureLength = #(opus-measure-length 1/4)
   r8 r8 |
-  \set Timing.measureLength = #3/4
+  \set Timing.measureLength = #(opus-measure-length 3/4)
   fis4. fis4. |
   g4. g4. |
   fis4. a4. |
@@ -151,7 +158,7 @@ lowerSustained = {
   c'4.-1 b4. |
   a4.~ a4 b8 |
   c'4. b4.-3 |
-  \set Timing.measureLength = #1/2
+  \set Timing.measureLength = #(opus-measure-length 1/2)
   e'4. e8 \bar ":|."
 }
 

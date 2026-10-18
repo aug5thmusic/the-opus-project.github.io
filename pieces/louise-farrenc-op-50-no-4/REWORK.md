@@ -17,3 +17,11 @@ The first encoding pass rebuilt the rapid figures and separate held voices from 
 - **Later advanced:** Independent Step 2 and agent reconciliation are complete. Human comparison of every note and mark remains to be done. Compilation and agent visual passes do not establish verification.
 
 Do not publish this Step 1 draft as a usable or verified score. The reconciled candidate is `score.ly`; it too remains withdrawn pending human review.
+
+## Compiler compatibility, 2026-10-18
+
+Strict compilation exposed a pre-existing type error in the measure-length settings of both attempts and `score.ly`: LilyPond 2.24 requires a Moment, whereas 2.26 requires a rational number. A small inline `opus-measure-length` adapter now queries the property's declared type and supplies the appropriate representation. Keeping the adapter in each file preserves standalone downloads.
+
+All forty settings retain their original lengths of 1/2, 1/4 or 3/4. Reversing only the adapter substitutions and removing its definition recovers the previous notation files byte for byte. All three one-page renders under LilyPond 2.26.0 are pixel-identical to the pre-change renders at 2200 pixels on the long edge. Repository validation, real-compiler integration tests and complete site builds pass with both LilyPond 2.24.4 and 2.26.0.
+
+Model: `openai/gpt-6-astra`; configuration: Codex with xhigh reasoning effort. This is a compiler-compatibility repair, not another independent transcription or reconciliation. The musical readings and metadata are unchanged: Step 3, withdrawn, and awaiting human review.
