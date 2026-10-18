@@ -84,6 +84,7 @@ def main() -> int:
         result = subprocess.run(
             [
                 lilypond,
+                "-dwarning-as-error",
                 "-dno-point-and-click",
                 "-o",
                 str(output_base),

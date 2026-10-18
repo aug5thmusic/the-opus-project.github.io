@@ -178,7 +178,14 @@ def compile_sources(sources: list[Path]) -> None:
                 str(source.relative_to(ROOT)).encode()
             ).hexdigest()[:12]
             result = subprocess.run(
-                [lilypond, "-dno-point-and-click", "-o", str(output_root / digest), str(source)],
+                [
+                    lilypond,
+                    "-dwarning-as-error",
+                    "-dno-point-and-click",
+                    "-o",
+                    str(output_root / digest),
+                    str(source),
+                ],
                 cwd=ROOT,
                 capture_output=True,
                 text=True,
