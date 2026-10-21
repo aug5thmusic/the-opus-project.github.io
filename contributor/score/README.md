@@ -23,6 +23,11 @@ only after storage acknowledges the decision; failed or uncertain saves keep the
 finding and draft selected. **Skip** makes no decision. This counts selected
 corrections, never full-score verification, application or publication.
 
+The compact strip keeps navigation, comment summaries, and decisions above the scores.
+**Finding details** opens full comments, the reviewer explanation, location
+bookmarks, original context, and package downloads without resizing the scores.
+**Tools** reveals the annotation toolbar; its existing keyboard shortcuts still work.
+
 The left selector offers **Printed source** and restores the previous Before
 position when switched back. Only marks belonging to the displayed PDF appear;
 the selected historical finding has an outline, and other marks are optional.

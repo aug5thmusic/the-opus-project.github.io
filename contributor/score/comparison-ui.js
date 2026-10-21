@@ -8,7 +8,8 @@ export function installComparison(api){
   const root=element('section',null,'correction-comparison');root.id='correctionComparison';root.hidden=true;root.setAttribute('aria-label','Check AI corrections');$('focusBar').before(root);
   let adapter=null,index=0,context=null,left='before',pending=false,initializing=false,opening=null,viewReady=false,generation=0,urls=[],positions=new Map(),currentId=null;
   const refs={};
-  const navigationSize=new ResizeObserver(entries=>root.style.setProperty('--correction-nav-height',`${entries[0].target.getBoundingClientRect().height}px`));
+  const scoreSwitch=document.querySelector('.score-switch'),switchHome=scoreSwitch.parentNode;
+  root.addEventListener('keydown',event=>{if(event.key==='Escape'&&!event.isComposing&&refs.details?.open){event.preventDefault();event.stopPropagation();refs.details.open=false;$('comparisonDetailsToggle').focus();}});
   const selected=()=>adapter?.findings()[index];
   const notify=(text,error=false)=>{refs.notice.textContent=text;refs.notice.dataset.error=String(error);api.message(text,error);};
   const guarded=fn=>async(...args)=>{
@@ -16,7 +17,8 @@ export function installComparison(api){
     const focused=root.contains(document.activeElement)?document.activeElement:null;
     pending=true;controls();try{await fn(...args);}catch(error){notify(error.message,true);}finally{
       pending=false;controls();
-      if(focused?.isConnected&&!root.hidden&&!document.querySelector('dialog[open]'))(focused.disabled?refs.picker:focused).focus({preventScroll:true});
+      if(refs.focusExplanation){refs.focusExplanation=false;refs.explanation.focus({preventScroll:true});}
+      else if(focused?.isConnected&&!root.hidden&&!document.querySelector('dialog[open]'))(focused.disabled?refs.picker:focused).focus({preventScroll:true});
     }
   };
   function button(label,id,fn){const el=element('button',label);if(id)el.id=id;el.onclick=guarded(fn);return el;}
@@ -25,6 +27,7 @@ export function installComparison(api){
     const disabled=pending||initializing||api.status().busy;
     root.setAttribute('aria-busy',String(disabled));
     for(const el of root.querySelectorAll('button,select,textarea,input'))el.disabled=disabled;
+    if(refs.left)refs.left.disabled=disabled;
     refs.previous.disabled=disabled||index===0;refs.next.disabled=disabled||index>=adapter.findings().length-1;
     refs.approve.disabled=disabled||!viewReady||!adapter.canApprove();refs.locate.disabled=disabled||!viewReady||!adapter.candidate;
     refs.package.disabled=disabled||!adapter.candidate;
@@ -47,14 +50,18 @@ export function installComparison(api){
     $('showSource').textContent=mode==='source'?'Printed source':mode==='original'?'Earlier version':'Before';
   }
   async function select(next){
+    refs.details.open=false;
     remember();viewReady=false;index=Math.max(0,Math.min(adapter.findings().length-1,next));
     const f=selected();if(!f)return;
     const token=++generation;currentId=f.id;
     context=await comparisonContext(adapter.issued,f);if(token!==generation)return;
     refs.picker.value=String(index);refs.original.textContent=f.comment;refs.ai.textContent=adapter.result(f.id)?.explanation??'No explanation supplied.';
+    refs.briefOriginal.textContent=f.comment;refs.briefAI.textContent=refs.ai.textContent;
+    refs.briefOriginal.title=f.comment;refs.briefAI.title=refs.ai.textContent;
     refs.explanation.value=await adapter.explanation(f.id);if(token!==generation)return;
     for(const url of urls)URL.revokeObjectURL(url);urls=[];refs.context.replaceChildren();
     refs.earlier.textContent=context.earlier?'Reported on an earlier version'+(context.original?' · original PDF available':' · only original crops available'):'Historical marks are read-only · exact task baseline';
+    refs.historyHint.hidden=!context.earlier;refs.historyHint.textContent=context.earlier?'Reported on an earlier version · see details':'';
     refs.left.replaceChildren(new Option('Before · task baseline','before'),new Option('Printed source','source'));
     if(context.earlier&&context.original)refs.left.add(new Option('Earlier version · original report','original'));
     context.crops.forEach((blob,i)=>{if(!blob)return;const image=element('img');image.src=URL.createObjectURL(blob);urls.push(image.src);image.alt=`${i?'Clean':'Marked'} original context for finding #${f.number}`;refs.context.append(image);});
@@ -70,13 +77,15 @@ export function installComparison(api){
   function refresh(){
     if(!adapter)return;
     const list=adapter.findings(),checked=list.filter(f=>adapter.decision(f.id)).length;
-    refs.progress.textContent=`${checked} of ${list.length} corrections checked · selected ${index+1} of ${list.length}`;
-    const localProgress=$('roundProgress');if(localProgress)localProgress.textContent=refs.progress.textContent;
+    const progress=`${checked} of ${list.length} corrections checked · selected ${index+1} of ${list.length}`;
+    refs.progress.textContent=`${checked}/${list.length} checked`;refs.progress.title=progress;refs.progress.setAttribute('aria-label',progress);
+    const localProgress=$('roundProgress');if(localProgress)localProgress.textContent=progress;
     const f=selected();if(f){refs.state.textContent=adapter.state(f.id);refs.picker.options[index].text=`#${f.number} · ${adapter.state(f.id)}`;}
     controls();
   }
   async function decide(state){
     const f=selected(),targetKey=adapter.key,id=f.id;
+    if(state!=='looks_correct'&&!refs.explanation.value.trim()){refs.details.open=true;refs.focusExplanation=true;throw new Error('Add your explanation in Finding details before requesting a correction or clarification.');}
     const saved=await adapter.saveDecision(id,state,refs.explanation.value);
     if(saved!==true)throw new Error('The decision was not confirmed saved. This finding is still selected; keep your explanation and retry.');
     if(adapter?.key!==targetKey||selected()?.id!==id)return;
@@ -85,36 +94,42 @@ export function installComparison(api){
   }
   async function open(next){
     if(adapter?.key===next.key){adapter=next;refresh();return opening;}
-    generation++;remember();adapter=next;positions=new Map();currentId=null;index=0;initializing=true;root.replaceChildren();root.hidden=false;document.body.classList.add('corrections-open');
+    generation++;remember();adapter=next;positions=new Map();currentId=null;index=0;initializing=true;switchHome.append(scoreSwitch);root.replaceChildren();root.hidden=false;document.body.classList.add('corrections-open');document.body.classList.remove('corrections-tools');
     $('showRendered').textContent='After';$('renderedLabel').textContent=adapter.candidate?'After · returned rendering':'After unavailable · previous rendering shown';
-    const navigation=element('div',null,'correction-navigation');navigationSize.disconnect();navigationSize.observe(navigation);
-    navigation.append(element('strong','Check AI corrections'));
-    refs.previous=button('Previous finding',next.ids.previous,()=>select(index-1));refs.next=button('Next finding',next.ids.next,()=>select(index+1));
+    const navigation=element('div',null,'correction-navigation');
+    refs.previous=button('‹',next.ids.previous,()=>select(index-1));refs.next=button('›',next.ids.next,()=>select(index+1));
+    for(const [el,label]of [[refs.previous,'Previous finding'],[refs.next,'Next finding']]){el.title=label;el.setAttribute('aria-label',label);}
     refs.picker=element('select');refs.picker.id=next.ids.picker??'correctionFinding';refs.picker.setAttribute('aria-label','Choose a reported finding');
     next.findings().forEach((f,i)=>refs.picker.add(new Option(`#${f.number} · ${next.state(f.id)}`,String(i))));refs.picker.onchange=guarded(()=>select(Number(refs.picker.value)));
     refs.progress=element('span');refs.progress.id='correctionProgress';navigation.append(refs.previous,refs.picker,refs.next,refs.progress);root.append(navigation);
+    refs.details=element('details',null,'correction-details');refs.details.id='comparisonDetails';const detailToggle=element('summary','Finding details');detailToggle.id='comparisonDetailsToggle';refs.details.append(detailToggle);
+    const detailBody=element('div',null,'correction-detail-body');const closeDetails=element('button','Close details');closeDetails.id='closeComparisonDetails';closeDetails.onclick=()=>{refs.details.open=false;detailToggle.focus();};detailBody.append(closeDetails);refs.details.append(detailBody);navigation.append(refs.details);
+    refs.tools=element('button','Tools');refs.tools.id='comparisonTools';refs.tools.setAttribute('aria-expanded','false');refs.tools.title='Show annotation tools';refs.tools.onclick=()=>{const open=document.body.classList.toggle('corrections-tools');refs.tools.setAttribute('aria-expanded',String(open));};navigation.append(refs.tools,scoreSwitch);
+    const brief=element('div',null,'correction-brief');for(const [key,label]of [['briefOriginal','Reported'],['briefAI','AI']]){const section=element('div');section.append(element('strong',label+' '));refs[key]=element('span');section.append(refs[key]);brief.append(section);}root.append(brief);
     const copy=element('div',null,'correction-copy');
     for(const [key,label]of [['original','Original comment'],['ai','AI explanation']]){const section=element('div');section.append(element('strong',label));refs[key]=element('p');section.append(refs[key]);copy.append(section);}
     const explain=element('label','Your explanation');refs.explanation=element('textarea');refs.explanation.id=next.ids.explanation;refs.explanation.rows=2;refs.explanation.maxLength=4000;
-    refs.explanation.oninput=()=>{const id=selected().id,value=refs.explanation.value;Promise.resolve(adapter.saveExplanation(id,value)).catch(e=>notify(`Explanation not saved: ${e.message}. Keep this page open.`,true));};explain.append(refs.explanation);copy.append(explain);root.append(copy);
+    refs.explanation.oninput=()=>{const id=selected().id,value=refs.explanation.value;Promise.resolve(adapter.saveExplanation(id,value)).catch(e=>notify(`Explanation not saved: ${e.message}. Keep this page open.`,true));};explain.append(refs.explanation);copy.append(explain);detailBody.append(copy);
     const actions=element('div',null,'correction-actions');
     refs.approve=button('Looks correct & next',next.ids.approve,()=>decide('looks_correct'));refs.approve.className='primary';
     refs.state=element('span');refs.state.id=next.ids.state;
-    actions.append(refs.approve,button('Still needs correction',next.ids.reject,()=>decide('needs_correction')),button('Needs clarification',next.ids.clarify,()=>decide('needs_clarification')),button('Skip','skipCorrection',()=>select(index+1)),refs.state);root.append(actions);
+    actions.append(refs.approve,button('Still needs correction',next.ids.reject,()=>decide('needs_correction')),button('Needs clarification',next.ids.clarify,()=>decide('needs_clarification')),button('Skip','skipCorrection',()=>select(index+1)));root.append(actions);detailBody.append(refs.state);
     const viewing=element('div',null,'correction-viewing');refs.left=element('select');refs.left.id='comparisonLeft';refs.left.setAttribute('aria-label','Left comparison pane');refs.left.onchange=guarded(async()=>{const mode=refs.left.value;remember();await displayLeft(mode);});
     const otherLabel=element('label','Other historical marks');refs.others=element('input');refs.others.id='otherHistoricalMarks';refs.others.type='checkbox';refs.others.onchange=guarded(async()=>{remember();await displayLeft(left);});otherLabel.prepend(refs.others);
     refs.locate=button('Locate corrected passage','locateCorrectedPassage',async()=>{
       const f=selected(),location=bookmark(f.id,api.capture().review,api.viewPosition('rendered'));
       if(await adapter.saveLocation(f.id,location)!==true)throw new Error('Location save was not confirmed. Keep this page open and retry.');
-      refs.alignment.textContent='Saved corresponding location · this exact After revision';notify('Location saved. No finding or approval created.');
+      refs.alignment.textContent='Saved corresponding location · this exact After revision';refs.details.open=false;notify('Location saved. No finding or approval created.');
     });
-    refs.alignment=element('span');refs.alignment.id='correctionAlignment';viewing.append(refs.left,otherLabel,refs.locate,refs.alignment);root.append(viewing);
-    refs.earlier=element('span');refs.earlier.id='correctionHistoryLabel';refs.contextDetails=element('details');refs.contextDetails.className='correction-context';refs.contextDetails.append(element('summary','Original marked context'));refs.context=element('div');refs.contextDetails.append(refs.context);root.append(refs.earlier,refs.contextDetails);
-    refs.package=button('Save comparison package','saveComparisonPackage',async()=>{await adapter.exportPackage();notify('Comparison package saved.');});root.append(refs.package);
-    refs.notice=element('div');refs.notice.id='correctionNotice';refs.notice.setAttribute('role','status');root.append(refs.notice);
+    $('comparisonLeft')?.remove();$('sourceLabel').after(refs.left);
+    refs.alignment=element('span');refs.alignment.id='correctionAlignment';viewing.append(otherLabel,refs.locate,refs.alignment);detailBody.append(viewing);
+    refs.earlier=element('span');refs.earlier.id='correctionHistoryLabel';refs.contextDetails=element('details');refs.contextDetails.className='correction-context';refs.contextDetails.append(element('summary','Original marked context'));refs.context=element('div');refs.contextDetails.append(refs.context);detailBody.append(refs.earlier,refs.contextDetails);
+    refs.historyHint=element('span',null,'correction-history-hint');root.append(refs.historyHint);
+    refs.package=button('Save comparison package','saveComparisonPackage',async()=>{await adapter.exportPackage();refs.details.open=false;notify('Comparison package saved.');});detailBody.append(refs.package);
+    refs.notice=element('div');refs.notice.id='correctionNotice';refs.notice.hidden=true;root.append(refs.notice);
     try{controls();opening=select(0);await opening;}finally{if(adapter?.key===next.key){opening=null;initializing=false;controls();}}
   }
-  function close(){adapter=null;generation++;opening=null;initializing=false;currentId=null;root.hidden=true;for(const url of urls)URL.revokeObjectURL(url);urls=[];document.body.classList.remove('corrections-open');$('showSource').textContent='Source';$('showRendered').textContent='Rendered';$('sourceLabel').textContent='Original source';}
+  function close(){adapter=null;generation++;opening=null;initializing=false;currentId=null;root.hidden=true;for(const url of urls)URL.revokeObjectURL(url);urls=[];document.body.classList.remove('corrections-open','corrections-tools');switchHome.append(scoreSwitch);$('comparisonLeft')?.remove();$('showSource').textContent='Source';$('showRendered').textContent='Rendered';$('sourceLabel').textContent='Original source';}
   document.addEventListener('score-desk-controls',controls);
   document.addEventListener('score-desk-change',()=>{if(adapter&&!adapter.matches(api.capture()))close();});
   return {open,refresh,close,selected:()=>index,select:guarded(select),state:()=>({key:adapter?.key,findingId:selected()?.id,left,pending})};

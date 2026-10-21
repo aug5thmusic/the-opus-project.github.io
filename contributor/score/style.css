@@ -249,48 +249,75 @@ button.icon-close svg{display:block;width:16px;height:16px;fill:none;stroke:curr
 .shared-work-selected .shared-local-tools{display:flex;gap:8px;flex-wrap:wrap;padding:8px 12px}
 @media(max-width:650px){.shared-paths{grid-template-columns:1fr}#sharedDialog{padding:16px}#sharedDialog .dialog-head h2{font-size:22px}}
 
-/* Comparison chrome stays outside the independently scrolling PDF panes. */
+/* Scores keep the workspace; detailed review evidence opens over them on demand. */
 #historicalOverlay{position:absolute;inset:0;pointer-events:none}
-.corrections-open #comparisonControl{display:none!important}
-.correction-comparison{flex:none;position:relative;background:#f5faf5;border-block:1px solid #adc9b8;padding:6px 12px;font-size:12px;max-height:48dvh;overflow:auto}
-.correction-navigation,.correction-actions,.correction-viewing{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
-.correction-comparison button,.correction-comparison select{padding:5px 8px;font-size:12px}
-.correction-navigation select{max-width:220px}
-.correction-navigation strong{margin-right:auto}
-#correctionProgress{margin-left:auto;font-variant-numeric:tabular-nums}
-.correction-copy{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin:7px 0}
-.correction-copy>div{min-width:0;max-height:76px;overflow:auto}
-.correction-copy p{margin:3px 0;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.4}
-.correction-copy label{display:block;font-weight:600}
-.correction-copy textarea{display:block;margin-top:3px;min-height:48px;max-height:90px;resize:vertical;font-size:12px;padding:5px}
-.correction-viewing{margin-top:7px}
-#correctionHistoryLabel{display:inline-block;margin-top:5px;color:#547267}
-#correctionAlignment{color:#547267}
-#correctionNotice{height:22px;min-height:22px;max-height:22px;overflow:auto;margin-top:3px;line-height:20px}
-#correctionNotice[data-error=true]{color:#874411}
-.correction-context{display:inline-block;padding:0 8px;background:transparent;border:0}
-.correction-context>div{display:flex;max-height:170px;overflow:auto;gap:8px}
+.corrections-open #comparisonControl,.corrections-open #sourceLabel{display:none!important}
+.corrections-open header{padding:3px 8px;gap:8px;flex-wrap:nowrap}
+.corrections-open .desk-brand{width:auto;min-width:0;display:block;flex:none}
+.corrections-open .desk-brand .eyebrow{display:none}
+.corrections-open header h1{font-size:16px}
+.corrections-open header #storage{font-size:10px;line-height:12px;min-height:12px;margin:0}
+.corrections-open .primary-actions{width:auto;flex-wrap:nowrap;gap:4px;overflow:auto}
+.corrections-open .primary-actions button{font-size:10px;padding:4px 6px;white-space:nowrap}
+.corrections-open #notices{flex-basis:20px;height:20px;min-height:20px;max-height:20px;padding:0 8px}
+.corrections-open #noticeCopy{max-height:18px}
+.corrections-open #notices #dismissMessage{height:18px;min-width:20px;width:20px}
+.corrections-open .toolbar{display:none}
+.corrections-open.corrections-tools .toolbar{display:flex;flex-wrap:nowrap;overflow:auto}
+.corrections-open.corrections-tools .toolbar>*{flex-shrink:0}
+.correction-comparison{flex:none;position:relative;z-index:4;background:#f5faf5;border-block:1px solid #adc9b8;padding:4px 8px;font-size:12px}
+.correction-navigation,.correction-actions,.correction-viewing{display:flex;gap:5px;align-items:center;flex-wrap:wrap}
+.correction-comparison button,.correction-comparison select,.correction-details>summary{padding:4px 7px;font-size:12px;line-height:17px}
+.correction-navigation select{width:180px;min-width:0;flex:0 1 180px}
+.correction-navigation>button:first-child,.correction-navigation>button:nth-child(3){font-size:19px;padding:2px 8px}
+#correctionProgress{font-size:11px;font-variant-numeric:tabular-nums;white-space:nowrap;margin-right:auto}
+.correction-navigation .score-switch{display:none;gap:3px;margin-left:0}
+.correction-navigation .score-switch button{font-size:11px;padding:3px 6px}
+.correction-brief{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:4px 0;line-height:17px}
+.correction-brief>div{overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.correction-brief strong{font-size:10px;text-transform:uppercase;color:#547267}
+.correction-actions{flex-wrap:nowrap;overflow-x:auto}
+.correction-actions button{white-space:nowrap;flex:none}
+.correction-history-hint{display:block;font-size:11px;margin-top:3px;color:#547267}
+.correction-details{position:static;padding:0;border:0;background:transparent}
+.correction-details>summary{font-weight:400;white-space:nowrap;border:1px solid #c9d5cd;border-radius:5px;background:white;cursor:pointer}
+.correction-details>summary:focus-visible{outline:3px solid #e7ac39;outline-offset:2px}
+.correction-detail-body{position:absolute;top:100%;right:8px;width:min(660px,calc(100vw - 16px));max-height:55dvh;overflow:auto;padding:12px;background:#f5faf5;border:1px solid #adc9b8;box-shadow:0 8px 20px #123f3933}
+#closeComparisonDetails{float:right}
+.correction-copy{display:grid;grid-template-columns:1fr 1fr;gap:12px;clear:both;margin:8px 0}
+.correction-copy>div{min-width:0}
+.correction-copy p{margin:3px 0;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.5}
+.correction-copy label{display:block;grid-column:1/-1;font-weight:600}
+.correction-copy textarea{display:block;margin-top:3px;min-height:54px;max-height:130px;resize:vertical;font-size:13px;padding:6px}
+.correction-viewing{margin:12px 0}
+#correctionHistoryLabel,#correctionAlignment{color:#547267;font-size:11px}
+.correction-context{padding:8px 0;background:transparent;border:0}
+.correction-context>div{display:flex;gap:8px;max-height:200px;overflow:auto}
 .correction-context img{max-width:48%;object-fit:contain;align-self:flex-start}
-.correction-navigation{position:sticky;top:-6px;background:#f5faf5;z-index:2}
-.correction-actions{position:sticky;top:calc(var(--correction-nav-height,34px) - 6px);background:#f5faf5;z-index:1;padding-block:2px}
+.corrections-open .viewer-head{display:flex;flex-wrap:nowrap;gap:3px;min-height:32px;padding:3px 5px}
+.corrections-open .viewer-head strong{flex:1;min-width:0;font-size:11px}
+.corrections-open .page-controls{display:flex;flex-wrap:nowrap;gap:2px;flex:none;width:auto}
+.corrections-open .page-controls label{font-size:0;gap:0}
+.corrections-open .page-controls input{width:30px;font-size:11px;padding:3px}
+.corrections-open .page-controls button{padding:3px;width:23px;height:25px}
+.corrections-open .page-controls select{width:72px;max-width:72px;padding:3px 1px;font-size:10px;grid-column:auto;height:25px}
+.corrections-open .page-controls>span{font-size:10px}
+#comparisonLeft{font-size:11px;min-width:50px;width:auto;flex:1;padding:4px 1px;max-width:180px}
+@media(max-width:1000px){.correction-navigation .score-switch{display:flex}}
 @media(max-width:700px){
- .correction-comparison{padding:5px 8px;max-height:52dvh}
- .correction-copy{grid-template-columns:1fr 1fr;gap:6px}
- .correction-copy>label{grid-column:1/-1;display:flex;align-items:center;gap:6px}
- .correction-copy textarea{flex:1;width:auto;min-height:32px;height:32px;margin:0}
- .correction-copy>div{max-height:46px}
- .correction-navigation strong{display:none}
- #correctionProgress{font-size:11px}
- .correction-comparison button,.correction-comparison select{font-size:11px;padding:4px 6px}
- #correctionAlignment,#correctionHistoryLabel{font-size:11px}
+ .correction-comparison{padding:3px 6px}
+ .correction-navigation{gap:3px}
+ .correction-navigation select{width:130px;flex-basis:130px}
+ .correction-comparison button,.correction-comparison select,.correction-details>summary{font-size:10px;padding:3px 5px;line-height:16px}
+ .correction-navigation .score-switch button{font-size:10px;padding:3px 4px}
+ .correction-brief{font-size:11px;gap:8px;margin:3px 0}
+ .correction-actions{gap:4px}
+ #correctionProgress{font-size:10px}
 }
-@media(max-height:550px){
- .corrections-open .toolbar{flex-wrap:nowrap;overflow-x:auto}
- .corrections-open .toolbar>*{flex-shrink:0}
- .corrections-open .toolbar .score-switch{order:-1}
- .correction-comparison{display:flex;flex-direction:column;max-height:32dvh}
- .correction-comparison>*{flex:none;order:2}
- .correction-navigation{order:0}.correction-navigation strong{display:none}
- .correction-actions{order:1}
- .correction-comparison button,.correction-comparison select{font-size:11px;padding:4px 6px}
+@media(max-width:550px){
+ .correction-navigation select{width:110px;flex-basis:110px}
+ .correction-navigation .score-switch{margin-left:auto}
+ .correction-navigation>button:first-child,.correction-navigation>button:nth-child(3){padding:1px 5px}
+ .corrections-open .viewer-head strong{font-size:10px}
+ .corrections-open .page-controls select{width:57px;max-width:57px}
 }

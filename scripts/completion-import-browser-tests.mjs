@@ -118,6 +118,7 @@ export async function runCompletionImports({browser,serve,evidence,root}){
     await bob.locator('#sharedReceiptOpenProposal').click();
     await bob.waitForFunction(id=>!document.querySelector('#sharedDialog').open&&document.querySelector('#sharedProposalPanel').dataset.proposalId===id,proposal.id);
     await bob.waitForFunction(()=>document.querySelector('#correctionComparison').getAttribute('aria-busy')==='false');
+    await bob.locator('#comparisonDetailsToggle').click();
     check((await bob.locator('#correctionComparison').innerText()).includes(attack)&&await bob.locator('#sharedFindingStatus').innerText()==='Waiting to be checked'&&!await bob.evaluate(()=>globalThis.importAttack),'fresh proposal view preserves original observations as inert text with new review pending');
     await bob.locator('#sharedProject').click();await login(bob,'bob');await importZip(bob,cleanBytes);const cleanImportId=await send(bob),cleanImport=await api('/api/completion-imports/'+cleanImportId),report=await api('/api/reports/'+cleanImport.reportId);
     check(cleanImport.proposalId===null&&report.clean===true&&report.scope.kind==='whole'&&new URL(bob.url()).searchParams.get('report')===report.id,'unchanged clean legacy completion receives a scoped report receipt instead of a correction proposal');

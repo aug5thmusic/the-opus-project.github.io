@@ -8,6 +8,7 @@ export async function runComparison({browser,serve,evidence,root}){
   const context=await browser.newContext({viewport:{width:1440,height:1000}});contexts.push(context);
   const page=await context.newPage();page.on('pageerror',e=>log.push('BROWSER ERROR '+e.message));
   const ready=async p=>p.waitForFunction(()=>document.body.dataset.ready==='true'&&!document.querySelector('#correctionComparison').hidden&&document.querySelector('#sourcePaper').getAttribute('aria-busy')==='false'&&!document.querySelector('#nextFinding').disabled);
+  const details=async p=>{if(!await p.locator('#comparisonDetails').evaluate(el=>el.open))await p.locator('#comparisonDetailsToggle').click();};
   const state=p=>p.evaluate(async()=>{const a=await import('./app.js'),s=a.completion.capture();return {review:s.review,returned:s.returned,selected:a.corrections.state(),position:document.querySelector('#renderedPage').value};});
   try{
     await page.goto(server.url+'contributor/score/');await page.waitForFunction(()=>document.body.dataset.ready==='true');
@@ -15,10 +16,10 @@ export async function runComparison({browser,serve,evidence,root}){
     check(await page.locator('#sourceViewer').getAttribute('data-render-sha256')===fixture.baseline,'Before is the issued task baseline despite a retained parallel response');
     check((await state(page)).review.files.rendered.sha256===fixture.after&&await page.locator('#sourceCount').innerText()==='/ 4'&&await page.locator('#renderedCount').innerText()==='/ 1','different page counts and exact After bytes stay independent');
     check(await page.locator('#historicalOverlay').getAttribute('data-finding-ids')==='comparison-1'&&(await state(page)).review.findings.length===0,'selected historical mark is emphasized only on matching Before, never copied to After');
-    await page.locator('#otherHistoricalMarks').check();await page.locator('#otherHistoricalMarks').uncheck();
+    await details(page);await page.locator('#otherHistoricalMarks').check();await page.locator('#otherHistoricalMarks').uncheck();await page.locator('#closeComparisonDetails').click();
     await page.locator('#renderedZoom').selectOption('2');await page.waitForFunction(()=>document.querySelector('#renderedPaper').getAttribute('aria-busy')==='false');
     await page.locator('#renderedScroll').evaluate(el=>el.scrollTo(180,240));
-    await page.locator('#locateCorrectedPassage').click();await page.waitForFunction(()=>document.querySelector('#correctionNotice').textContent.startsWith('Location saved'));
+    await details(page);await page.locator('#locateCorrectedPassage').click();await page.waitForFunction(()=>document.querySelector('#correctionNotice').textContent.startsWith('Location saved'));
     let s=await state(page),location=s.returned.locations['comparison-1'];
     check(location.position.zoom===2&&location.candidate.renderSha256===fixture.after&&s.review.pages[0].rotation===90&&s.review.pages[0].view[0]===12&&s.review.findings.length===0&&!s.returned.reported[0].decision,'bookmark stores rotated/cropped PDF coordinates separately from findings and decisions');
     await page.locator('#sourcePage').fill('4');await page.locator('#sourcePage').dispatchEvent('change');await page.waitForFunction(()=>document.querySelector('#sourcePaper').getAttribute('aria-busy')==='false');
@@ -26,8 +27,8 @@ export async function runComparison({browser,serve,evidence,root}){
     check(await page.locator('#historicalOverlay').isHidden()&&(await state(page)).review.files.source.sha256===fixture.source,'Printed source uses its original identity and has no historical overlay');
     await page.locator('#comparisonLeft').selectOption('before');await page.waitForFunction(()=>document.querySelector('#sourcePage').value==='4');
     check((await state(page)).review.files.rendered.sha256===fixture.after,'Before/Source restores Before page without replacing candidate files');
-    await page.locator('#roundExplanation').fill('Unsent explanation retained');await page.locator('#nextFinding').click();await page.waitForFunction(()=>document.querySelector('#correctionFinding').value==='1'&&document.querySelector('#correctionComparison').getAttribute('aria-busy')==='false');
-    check((await page.locator('#correctionAlignment').innerText()).includes('Approximate')&&await page.locator('#sourcePage').inputValue()==='2','text-only finding opens page context and labels unmatched After honestly');
+    await details(page);await page.locator('#roundExplanation').fill('Unsent explanation retained');await page.locator('#nextFinding').click();await page.waitForFunction(()=>document.querySelector('#correctionFinding').value==='1'&&document.querySelector('#correctionComparison').getAttribute('aria-busy')==='false');
+    await details(page);check((await page.locator('#correctionAlignment').innerText()).includes('Approximate')&&await page.locator('#sourcePage').inputValue()==='2','text-only finding opens page context and labels unmatched After honestly');
     await page.locator('#skipCorrection').click();await page.waitForFunction(()=>document.querySelector('#correctionFinding').value==='2'&&document.querySelector('#correctionComparison').getAttribute('aria-busy')==='false');
     check(!(await state(page)).returned.reported[1].decision,'Skip leaves the finding unchecked');
     await page.locator('#previousFinding').click();await page.locator('#previousFinding').click();await ready(page);
@@ -36,7 +37,7 @@ export async function runComparison({browser,serve,evidence,root}){
     check((await state(page)).returned.locations['comparison-1'].position.zoom===2&&await page.locator('#renderedZoom').inputValue()==='2','reload restores the exact candidate bookmark');
     // A real second tab races the same IndexedDB CAS; no replacement of work.
     const stale=await context.newPage();await stale.goto(page.url());await ready(stale);
-    await page.locator('#roundExplanation').fill('Keep this approval explanation');await page.evaluate(async()=>{const a=await import('./app.js');await a.saveNow();window.originalPut=a.operations.putSaved;a.operations.putSaved=async()=>{throw new Error('SIMULATED failed decision save');};});
+    await details(page);await page.locator('#roundExplanation').fill('Keep this approval explanation');await page.evaluate(async()=>{const a=await import('./app.js');await a.saveNow();window.originalPut=a.operations.putSaved;a.operations.putSaved=async()=>{throw new Error('SIMULATED failed decision save');};});
     await page.locator('#looksCorrect').click();await page.waitForFunction(()=>document.querySelector('#correctionNotice').textContent.includes('SIMULATED failed'));
     check((await state(page)).selected.findingId==='comparison-1'&&await page.locator('#roundExplanation').inputValue()==='Keep this approval explanation'&&!(await state(page)).returned.reported[0].decision,'failed save keeps selection and explanation without approval');
     await page.evaluate(async()=>{const a=await import('./app.js');a.operations.putSaved=async(...args)=>{await new Promise(r=>window.releaseDecision=r);return window.originalPut(...args);};});
@@ -48,25 +49,25 @@ export async function runComparison({browser,serve,evidence,root}){
     check((await state(stale)).selected.findingId==='comparison-1','stale-tab decision cannot advance or overwrite a concurrent decision');await stale.close();
     await page.evaluate(async()=>{(await import('./app.js')).operations.putSaved=window.originalPut;});
     // Native editing still targets After while Before or Source is visible.
-    await page.locator('#newFinding').click();await page.locator('#comment').fill('SIMULATED new After error');await page.locator('#roundExplanation').fill('ndv');
+    await page.locator('#comparisonTools').click();await page.locator('#newFinding').click();await page.locator('#comment').fill('SIMULATED new After error');await details(page);await page.locator('#roundExplanation').fill('ndv');
     await page.locator('#roundExplanation').press('n');
     check((await state(page)).review.findings.length===1&&await page.locator('#comment').inputValue()==='SIMULATED new After error','typing shortcut letters in explanations preserves the unsent After comment');
     await page.locator('#nextFinding').click();await page.waitForFunction(()=>document.querySelector('#correctionFinding').value==='2'&&document.querySelector('#correctionComparison').getAttribute('aria-busy')==='false');
     check(await page.locator('#comment').inputValue()==='SIMULATED new After error','changing selected correction preserves the active new finding');
     await page.locator('#saveFinding').click();
-    const [download]=await Promise.all([page.waitForEvent('download'),page.locator('#saveComparisonPackage').click()]);const zip=await readFile(await download.path());
+    await details(page);const [download]=await Promise.all([page.waitForEvent('download'),page.locator('#saveComparisonPackage').click()]);const zip=await readFile(await download.path());
     const fresh=await browser.newContext({viewport:{width:1440,height:1000}});contexts.push(fresh);const imported=await fresh.newPage();await imported.goto(page.url());await imported.waitForFunction(()=>document.body.dataset.ready==='true');
     await imported.locator('#packageFile').setInputFiles({name:'SIMULATED-comparison-recovery.zip',mimeType:'application/zip',buffer:Buffer.from(zip)});await ready(imported);
     s=await state(imported);check(s.returned.locations['comparison-1'].position.zoom===2&&s.review.files.source.sha256===fixture.source&&s.review.findings.length===1&&s.returned.reported[0].decision,'fresh-browser package round-trip preserves bookmarks, exact file identities, decisions and new After findings');
     await page.evaluate(async id=>{const a=await import('./app.js'),e=await (await import('./handoff-store.js')).retained(id);await a.handoff.returnedUI.open(e);},fixture.secondId);await ready(page);
     s=await state(page);check(!s.returned.locations&&s.returned.reported.every(f=>!f.decision),'different rendering inherits neither locations nor approvals');
     await page.evaluate(async id=>{const a=await import('./app.js'),e=await (await import('./handoff-store.js')).retained(id);await a.handoff.returnedUI.open(e);},fixture.olderId);await ready(page);
-    check((await page.locator('#correctionHistoryLabel').innerText()).includes('Reported on an earlier version')&&await page.locator('#sourceViewer').getAttribute('data-render-sha256')===fixture.baseline&&await page.locator('#historicalOverlay').getAttribute('data-finding-ids')==='comparison-1','older finding opens its exact original PDF and matching marks with an explicit earlier-version label');
-    await page.locator('#comparisonLeft').selectOption('before');await page.waitForFunction(()=>document.querySelector('#correctionComparison').getAttribute('aria-busy')==='false');
+    await details(page);check((await page.locator('#correctionHistoryLabel').innerText()).includes('Reported on an earlier version')&&await page.locator('#sourceViewer').getAttribute('data-render-sha256')===fixture.baseline&&await page.locator('#historicalOverlay').getAttribute('data-finding-ids')==='comparison-1','older finding opens its exact original PDF and matching marks with an explicit earlier-version label');
+    await page.locator('#closeComparisonDetails').click();await page.locator('#comparisonLeft').selectOption('before');await page.waitForFunction(()=>document.querySelector('#correctionComparison').getAttribute('aria-busy')==='false');
     check(await page.locator('#sourceViewer').getAttribute('data-render-sha256')===fixture.after&&await page.locator('#historicalOverlay').getAttribute('data-finding-ids')==='','task baseline remains available without copying older marks onto it');
     await page.evaluate(async id=>{const a=await import('./app.js'),e=await (await import('./handoff-store.js')).retained(id);await a.handoff.returnedUI.open(e);},fixture.cropId);await ready(page);
-    check((await page.locator('#correctionHistoryLabel').innerText()).includes('only original crops available')&&await page.locator('.correction-context img').count()===2&&await page.locator('#comparisonLeft option[value=original]').count()===0,'legacy crop-only history is displayed honestly without inventing an original PDF');
-    await page.locator('.correction-context summary').click();
+    await details(page);check((await page.locator('#correctionHistoryLabel').innerText()).includes('only original crops available')&&await page.locator('.correction-context img').count()===2&&await page.locator('#comparisonLeft option[value=original]').count()===0,'legacy crop-only history is displayed honestly without inventing an original PDF');
+    await details(page);await page.locator('.correction-context summary').click();await page.locator('#closeComparisonDetails').click();
     await page.setViewportSize({width:390,height:844});await page.locator('#showRendered').click();
     check(await page.locator('#renderedViewer').isVisible()&&!await page.locator('#sourceViewer').isVisible()&&await page.locator('#looksCorrect').isVisible(),'narrow layout has an explicit Before/After switch and visible review controls');
     const before=await page.locator('#looksCorrect').boundingBox();await page.evaluate(async()=>{const a=await import('./app.js');a.operations.putSaved=async()=>{throw new Error('SIMULATED notice with a longer explanation to ensure that controls do not move when a save fails.');};});await page.locator('#looksCorrect').click();await page.waitForFunction(()=>document.querySelector('#correctionNotice').dataset.error==='true');
@@ -74,7 +75,16 @@ export async function runComparison({browser,serve,evidence,root}){
     await page.screenshot({path:resolve(evidence,'comparison-narrow.png')});await imported.screenshot({path:resolve(evidence,'comparison-desktop.png')});
     await page.setViewportSize({width:724,height:420});
     await page.locator('#correctionComparison').evaluate(el=>el.scrollTop=0);
-    check(await page.locator('#renderedScroll').evaluate(el=>el.clientHeight)>=100&&await page.locator('#looksCorrect').evaluate(el=>{const r=el.getBoundingClientRect();return r.top>=0&&r.bottom<innerHeight;}),'short landscape window keeps score space and the approval action visible');
+    await page.screenshot({path:resolve(evidence,'comparison-short.png')});console.log('compact layout',await page.evaluate(()=>({height:innerHeight,score:document.querySelector('#renderedScroll').clientHeight,card:document.querySelector('#correctionComparison').clientHeight,tools:document.body.className})));
+    check(await page.locator('#renderedScroll').evaluate(el=>el.clientHeight/innerHeight)>.5&&await page.locator('#looksCorrect').evaluate(el=>{const r=el.getBoundingClientRect();return r.top>=0&&r.bottom<innerHeight;}),'short landscape window keeps score space and the approval action visible');
+    await page.setViewportSize({width:489,height:422});await page.locator('#showBoth').click();
+    check(await page.locator('#renderedScroll').evaluate(el=>el.clientHeight/innerHeight)>.5&&await page.locator('#sourceScroll').evaluate(el=>el.clientHeight/innerHeight)>.5,'actual narrow preview size gives both score panes more than half the window height');
+    await page.screenshot({path:resolve(evidence,'comparison-compact.png')});
+    const scoreHeight=await page.locator('#renderedScroll').evaluate(el=>el.clientHeight);
+    await page.locator('#needsClarification').click();await page.waitForFunction(()=>document.querySelector('#comparisonDetails').open);
+    check(await page.locator('#roundExplanation').evaluate(el=>document.activeElement===el)&&await page.locator('#renderedScroll').evaluate(el=>el.clientHeight)===scoreHeight,'requesting clarification focuses the required explanation without resizing the score');
+    await page.locator('#roundExplanation').fill('Retain this draft when closing details');await page.locator('#roundExplanation').press('Escape');
+    check(!await page.locator('#comparisonDetails').evaluate(el=>el.open)&&await page.locator('#roundExplanation').inputValue()==='Retain this draft when closing details'&&await page.locator('#comparisonDetailsToggle').evaluate(el=>document.activeElement===el),'Escape closes details, restores focus and preserves the explanation draft');
     await writeFile(resolve(evidence,'comparison.txt'),log.join('\n')+'\n');return {name:'comparison',assertions};
   }finally{for(const c of contexts)await c.close();await server.close();}
 }
