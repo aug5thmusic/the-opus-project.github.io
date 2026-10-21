@@ -25,6 +25,21 @@ jobs:
         run: |
           node contributor/score/qa/check-integration.cjs
           node contributor/tests/work-links.test.mjs
+          node contributor/score/qa/github-handoff.test.mjs
+          node contributor/score/qa/shared-packages.test.mjs
+          node contributor/score/qa/shared-client.test.mjs
+          node contributor/score/qa/shared-ui.test.mjs
+      - name: Test durable shared service
+        run: python3 -B -m unittest discover -s service -p 'test_*.py' -v
+      - name: Install isolated browser test tools
+        run: |
+          npm install --prefix .build/browser-tools --no-save playwright@1.62.1
+          node .build/browser-tools/node_modules/playwright/cli.js install --with-deps chromium
+      - name: Exercise local and cross-person browser workflows
+        env:
+          OPUS_PLAYWRIGHT: .build/browser-tools/node_modules/playwright/index.mjs
+          OPUS_PYTHON: python3
+        run: node scripts/browser-tests.mjs --shared
       - name: Validate transcription provenance
         env:
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}

@@ -4,6 +4,7 @@ import {readPackage,makeInput,makeTask,readResponse,acceptResponse,taskFindings,
 import {installReturned} from './returned-ui.js';
 import {restoreReturnedBackup} from './returned.js';
 import {retain,retained,retainedList} from './handoff-store.js';
+import {retainPortableTask} from './shared-packages.js';
 const $=id=>document.getElementById(id);
 export function installHandoff(api){
   let job=false,resolving=false,pending=null,shown=null,links=[],prompt='',issuedStamp=null;
@@ -28,6 +29,9 @@ export function installHandoff(api){
   $('openPackage').onclick=()=>$('packageFile').click();
   $('packageFile').onchange=guarded(async e=>{const file=e.target.files[0];e.target.value='';if(!file||api.status().busy)return;const captured=api.capture().stamp;status('Checking package files…');
     const parsed=await api.lock(()=>io.readPackage(file,api.inspectPdf));if(!api.matches(captured))throw new Error('The review changed while checking this package. Open it again when ready.');
+    // An original task ZIP carries the immutable baseline needed in a fresh
+    // browser. Validate every byte before retaining it; never replace an ID.
+    if(parsed.payloads.has('task.json'))await api.lock(()=>retainPortableTask(file,api.inspectPdf,{lookup:retained,write:io.retain}));
     const restored=await restoreReturnedBackup(parsed,api.inspectPdf);
     if(restored){for(const entry of [restored.issued,restored.entry]){const existing=await retained(entry.id),path=entry.kind==='task'?'task.json':'response.json';if(existing&&(JSON.stringify(existing.task?.baseline??existing.baseline)!==JSON.stringify(entry.task?.baseline??entry.baseline)||await sha256(await existing.payloads.get(path).arrayBuffer())!==await sha256(await entry.payloads.get(path).arrayBuffer())))throw new Error('Retained task or response identity conflicts with this recovery.');if(!existing)await io.retain(entry);}await api.openReturned(restored.seed);}
     else await api.openImported(parsed);await history();

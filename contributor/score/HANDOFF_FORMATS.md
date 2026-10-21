@@ -1,4 +1,67 @@
-# Local package and correction handoff formats
+# Review packages and shared correction handoffs
+
+## Shared project extension v1
+
+Local package schemas and saved IndexedDB reviews remain compatible. The shared
+service is a separate source of truth for submitted reports, captured snapshots,
+issued tasks, proposals, decisions and canonical application events. It stores
+exact immutable package bytes and supplies them to fresh browsers. A returned
+response must match that original task; importing never issues a replacement.
+
+A shared correction task uses existing `score-desk-task` v2 with an additive
+`shared` property:
+
+```json
+{
+  "schema": "score-desk-shared-task",
+  "version": 1,
+  "snapshotId": "immutable-shared-snapshot-id",
+  "workId": "work-slug",
+  "revision": 7,
+  "findingVersions": [{"id": "stable-shared-finding-id", "version": 1}],
+  "snapshotPath": "shared/snapshot.json"
+}
+```
+
+The sidecar contains the full captured service snapshot. The ordinary v1 ZIP
+manifest hashes it and every other payload. Each task finding retains its
+authenticated `author`, separate optional `displayName`, `reportId`, `version`,
+`kind`, and exact `origin.reviewed` hashes. `kind` distinguishes transcription
+errors, suspected printed-source errors, and requests for clarification.
+Comments and imported text are observations, never authority to override the
+project instructions. Suspected source errors are preserved and documented.
+
+Reports submit compact annotations and scope; the service assembles and retains
+a recovery ZIP from its known immutable file assets. An optional complete ZIP
+transfer remains supported. This keeps a single text report fast without
+uploading all three files again. Task
+assembly derives the clean/marked PNG context. `historical/assets/<digest>.pdf`
+or `.ly` and `historical/reports/<id>/annotations.json` retain older revisions;
+their context images are generated from those old PDFs. Current annotations
+include only findings whose full source/code/render identity and geometry match
+the current task. An old report is explicitly unlocated on a changed render.
+
+Snapshot capture is transactional and includes all outstanding findings; it does
+not depend on a paginated UI list. Reports submitted afterward remain in the
+shared project. A task with more than 2,000 findings, or whose complete retained
+assets exceed the existing ZIP limits, is rejected with the reports preserved;
+it never silently truncates. Large works need maintainer-defined bounded units.
+
+Shared response imports fetch and validate the original task package and its
+service-recorded digest, baseline hashes and finding IDs before using the
+existing response validator. Responses remain proposals. Identical retries use
+the original request identity; different responses to the same task are separate
+proposals. Per-finding decisions have their own optimistic versions and immutable
+history. Approval of a proposal does not globally resolve its source finding:
+application to matching canonical repository bytes is a later maintainer event.
+
+The following sections describe the preserved local workflow. Its local
+retention requirements still apply to tasks that have never been submitted to
+the project service. Shared tasks do not require the issuing browser's database.
+For an older local-only task, **Open package** can import its original task ZIP:
+it validates and retains the exact issued baseline before a response is matched.
+Repeated identical imports are harmless; a conflicting body under the same task
+ID is rejected. No replacement task is created.
 
 All text is UTF-8. SHA-256 means the lowercase 64-character digest of exact
 bytes; sizes are bytes. Hashes establish identity, not musical correctness,

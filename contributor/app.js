@@ -2,6 +2,9 @@ import {workLinks} from './work-links.mjs';
 
 const slug = new URLSearchParams(location.search).get('piece');
 if (slug) {
+  for (const link of document.querySelectorAll('[data-score-desk]')) {
+    const target = new URL('score/', location.href); target.searchParams.set('piece', slug); link.href = target.href;
+  }
   const panel = document.getElementById('selected-work');
   const status = document.getElementById('work-status');
   panel.hidden = false;

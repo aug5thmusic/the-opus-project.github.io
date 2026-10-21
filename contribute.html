@@ -23,12 +23,12 @@
 
   <main>
     <section class="intro" aria-labelledby="page-title">
-      <h1 id="page-title">Contribute a score</h1>
-      <p>Choose a piece and let an AI coding agent do the notation work.</p>
+      <h1 id="page-title">Make one useful contribution</h1>
+      <p>Report an error, review a passage, supply an AI correction response, or check a proposed fix. You can do one and leave.</p>
     </section>
 
     <section class="panel" aria-labelledby="start-title">
-      <div class="panel-heading"><h2 id="start-title">Get started</h2></div>
+      <div class="panel-heading"><h2 id="start-title">Add a new transcription</h2></div>
       <div class="panel-body prose">
         <ol>
           <li>Choose a printed, public-domain edition from IMSLP or another reliable library. Do not use a handwritten manuscript.</li>
@@ -52,14 +52,18 @@
     </section>
 
     <section class="panel" aria-labelledby="proofread-title">
-      <div class="panel-heading"><h2 id="proofread-title">Proofread without cloning</h2></div>
+      <div class="panel-heading"><h2 id="proofread-title">Four ways to help in Score Desk</h2></div>
       <div class="panel-body prose">
-        <p>Choose a work in the <a href="./#scores">catalog</a> and open <em>Compare PDFs</em>. The printed source and rendered transcription appear together, with links to open either PDF in its own tab. Compare pitches, rhythm, markings, and text across the whole piece.</p>
-        <p>To mark errors directly, open <a href="contributor/">Score Desk</a>. Open a review ZIP, type a note or mark a passage. Choose <strong>Send for corrections</strong>, give its package and generated prompt to your agent, then import its response and review the returned revision.</p>
-        <p>Choose <strong>Finish review</strong> and declare whether you checked the corrections, the entire work, or part of it. Score Desk records the exact files, findings and review scope automatically. Your files stay in your browser until you choose to share an export.</p>
-        <p><strong>Report corrections → agent returns a revision → review it → prepare GitHub contribution → agent opens a PR.</strong></p>
-        <p>After finishing your review, choose <strong>Prepare GitHub contribution</strong>. Download the ZIP and use <strong>Copy GitHub instructions</strong> to give it to your coding agent. The agent checks the exact repository target, applies the reviewed files and opens a pull request. A maintainer reviews and merges it before publication. The browser does not upload or submit anything automatically.</p>
-        <p>You can still use the discussion on the comparison page. A maintainer records human verification only after reviewing complete coverage and any corrections. Reviewing in Score Desk does not require a GitHub account; posting to Discussions uses GitHub sign-in.</p>
+        <p>Choose a work in <a href="contributor/">Score Desk</a> and open <strong>Project contributions</strong>. The shared service, once activated by the project owner, supplies the files and keeps reports available across people and devices. Reading and drafting are open; shared submissions use GitHub sign-in.</p>
+        <ol>
+          <li><strong>Report an error.</strong> Type a finding or draw a highlight and choose <strong>Submit findings</strong>. One finding is enough. A receipt confirms it reached the project. You are done.</li>
+          <li><strong>Review this score.</strong> Choose a partial or whole-work scope. Submit findings or explicitly declare <strong>No errors found in the reviewed scope</strong>. You do not need to change any music. Your clean review does not close anyone else's findings.</li>
+          <li><strong>Help fix reported errors.</strong> Choose <strong>Get correction package</strong>. Download its ZIP, attach it to your chosen AI and paste the supplied instructions. Choose <strong>Return AI response</strong> when it finishes. Another person can check the proposal.</li>
+          <li><strong>Review proposed fixes.</strong> Open a proposal, compare it with the print, and record <strong>Looks correct</strong>, <strong>Still needs correction</strong>, or <strong>Needs clarification</strong> for any findings you checked. Others can finish the remainder.</li>
+        </ol>
+        <p><strong>Saved locally</strong> means this browser has a draft. <strong>Submitted to the project</strong> requires a shared receipt. <strong>Awaiting review</strong> means a returned proposal exists. <strong>Applied to the project</strong> requires the reviewed candidate to reach the canonical repository revision. These are separate events.</p>
+        <p>If the service is not configured, Score Desk clearly says shared submission is inactive; keep using local review and recovery ZIPs. Existing Discussion reports remain available. A contributor can link and explicitly structure a Discussion report while retaining its stated author and original URL.</p>
+        <p>For publication, a maintainer or coding agent uses the exact reviewed candidate and provenance to prepare a correction PR, or a review-only provenance contribution with unchanged LilyPond. Human verification requires an eligible Step 3 score, complete coverage, an authorized identified verifier and approval of the exact revision. No report, clean declaration or AI assertion grants verification.</p>
       </div>
     </section>
 

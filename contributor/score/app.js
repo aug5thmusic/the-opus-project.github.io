@@ -8,6 +8,7 @@ import {makeReturnedBackup,restoreInstructionHistory} from './returned.js';
 import {mergeCompletions,exactReview} from './completion-model.js';
 import {addCompletionHistory} from './completion.js';
 import {installCompletion} from './completion-ui.js';
+import {installShared} from './shared-ui.js';
 pdfjs.GlobalWorkerOptions.workerSrc='./vendor/pdf.worker.mjs';
 const $=id=>document.getElementById(id);
 let review=null, files=null, active=null, focused=null, mode='navigate', gesture=null, undo=[],redo=[], busy=false,revision=0,dirty=false;
@@ -356,9 +357,9 @@ $('emergency').onclick=guard(async()=>{
 $('export').onclick=()=>{if(!review||busy)return;cancelGesture();$('workspaceDialog').close();$('exports').showModal();};
 $('closeExports').onclick=()=>{if(!exportJob)$('exports').close();};
 $('exports').addEventListener('cancel',e=>{if(exportJob){e.preventDefault();message('Export is still running. Editing will be available when it finishes.');}});
-$('exports').addEventListener('close',()=>{if(exportJob)exportJob.cancelled=true;});
+$('exports').addEventListener('close',()=>{if(exportJob&&!$('exports').open)exportJob.cancelled=true;});
 $('context').onchange=()=>{if(exportJob){$('context').value=exportJob.context;return;}invalidateExport();};
-const currentExport=job=>exportJob===job&&!job.cancelled&&matchesStamp(job)&&$('context').value===job.context;
+const currentExport=job=>exportJob===job&&!job.cancelled&&$('exports').open&&matchesStamp(job)&&$('context').value===job.context;
 $('generate').onclick=guard(async()=>{
   if(busy||!review)return;invalidateExport();const job={...stamp(),context:$('context').value,cancelled:false};exportJob=job;
   busy=true;controls();$('generate').disabled=true;$('closeExports').disabled=true;$('context').disabled=true;
@@ -386,6 +387,9 @@ export const sessionStatus=()=>({...stamp(),dirty,busy,persistedRevision,saveCon
 const appApi={
   capture:()=>({review:clone(review),files,returned:clone(returned),active,doc:comparison?.current??views.rendered.doc,comparison:Boolean(comparison),stamp:stamp(),revisionId,workspaceId:recordKey(),persistedRevision,completions:clone(completions)}),matches:matchesStamp,status:sessionStatus,message,
   openImported:parsed=>openSnapshot(parsed.files,null,parsed.review,null,false,parsed.completionBundle),
+  openFiles:nextFiles=>openSnapshot(nextFiles),
+  showFindings:()=>setComments(true),
+  refreshControls:()=>{cancelGesture();controls();},
   openReturned:seed=>openSnapshot(seed.files,null,seed.review,seed),
   reloadReturned:()=>openSnapshot(null,recordKey(),null,null,true),
   updateReturned:mutate=>{if(!canEdit()||!returned)return;mutate(returned);changed();},
@@ -416,6 +420,7 @@ const appApi={
 };
 export const handoff=installHandoff(appApi);
 export const completion=installCompletion(appApi);
+export const shared=installShared(appApi);
 controls();
 // Reopening retained bytes never attaches an old review to newly selected files.
-(async()=>{try{const entries=await refreshSaved();if(entries.length){await openSnapshot(null,entries[0].id);message('Restored last saved snapshot');}}catch(e){storageFailure(e);}finally{document.body.dataset.ready='true';}})();
+(async()=>{try{const entries=await refreshSaved();if(entries.length){await openSnapshot(null,entries[0].id);message('Restored last saved snapshot');}}catch(e){storageFailure(e);}finally{document.body.dataset.ready='true';document.dispatchEvent(new Event('score-desk-ready'));}})();

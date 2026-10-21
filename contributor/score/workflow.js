@@ -148,7 +148,7 @@ export async function readResponse(blob,lookup=retained){
   if(!response||typeof response!=='object'||Array.isArray(response))fail('AI response must be a supported Score Desk object.');
   if(response.schema!=='score-desk-response'||response.version!==1)fail('Unsupported AI response format.');
   if(typeof response.taskId!=='string')fail('Response is missing its task ID.');const issued=await lookup(response.taskId);
-  if(!issued||issued.kind!=='task')fail('This response does not match a task issued on this device and browser origin. Open the issuing workspace.');
+  if(!issued||issued.kind!=='task')fail('The original task is not available here. Use Open package to import its unchanged task ZIP, or use Return AI response on the shared work page. No replacement task has been created.');
   const expected=issued.task.baseline,baseline=response.baseline;
   if(!baseline||Object.keys(baseline).length!==Object.keys(expected).length||Object.keys(expected).some(key=>baseline[key]!==expected[key]))fail('This response answers a different baseline. The current review has not changed.');
   await checkPayloads(payloads,response.files,'response.json');

@@ -5,3 +5,15 @@ __pycache__/
 *.pdf
 *.ps
 *.log
+node_modules/
+*.sqlite
+*.sqlite3
+*.sqlite-wal
+*.sqlite-shm
+*.sqlite3-wal
+*.sqlite3-shm
+*.db
+*.db-wal
+*.db-shm
+*.zip
+service/.env

@@ -179,3 +179,65 @@ button.icon-close svg{display:block;width:16px;height:16px;fill:none;stroke:curr
 #githubInstructions{display:block;margin-top:8px;min-height:160px;font:12px ui-monospace,monospace;line-height:1.5}
 #githubCopyStatus{font-size:12px;margin-left:8px}
 #finishDownloads>.download{display:inline-block;background:var(--accent);color:#fff;padding:10px 16px;border-radius:5px;text-decoration:none;font-weight:600}
+
+/* Shared contribution screens are separate from the fixed notification slot and brush editor. */
+#sharedDialog{width:860px;max-width:calc(100vw - 24px)}
+#sharedDialog h3{font-size:18px;margin:22px 0 10px}
+#sharedDialog label{align-items:flex-start}
+#sharedDialog label:has(textarea),#sharedDialog label:has(input:not([type=checkbox]):not([type=radio])),#sharedPromptLabel{display:flex;flex-direction:column;align-items:stretch;gap:6px}
+#sharedDialog input:not([type=checkbox]):not([type=radio]):not([type=file]){font:inherit;padding:8px;border:1px solid var(--line);border-radius:4px;max-width:100%}
+#sharedDialog fieldset{border:1px solid var(--line);border-radius:6px;padding:6px 14px}
+#sharedDialog fieldset label{margin:12px 0}
+.shared-session,.shared-work-picker,.shared-inline-actions,.shared-retry{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.shared-session{padding:10px 0;border-block:1px solid var(--line)}
+.shared-session span{flex:1}
+.shared-work-picker label{flex:1;min-width:180px;display:flex;flex-direction:column;gap:6px;margin:10px 0}
+#sharedWork{width:100%;min-width:0}
+#sharedStatus{height:48px;max-height:48px;overflow-y:auto;margin:8px 0;font-size:13px;line-height:1.6}
+#sharedStatus[data-error=true],.shared-warning{color:#874411;background:#fff0df;padding:8px;border-radius:4px}
+.shared-paths{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin:14px 0}
+.shared-paths button{text-align:left;padding:12px}
+.shared-paths b,.shared-paths span{display:block}
+.shared-paths b{font-size:14px;margin-bottom:6px}
+.shared-paths span{font-size:12px;line-height:1.5;color:#5c7169}
+.shared-finding-choice,.shared-record{padding:12px;margin:10px 0;border:1px solid var(--line);border-radius:6px;overflow-wrap:anywhere}
+.shared-finding-choice label{margin:0 0 10px!important;display:flex!important;flex-direction:row!important}
+.shared-finding-choice select{width:100%;font-size:12px}
+.shared-record p{margin:8px 0;white-space:pre-wrap}
+.shared-record small{display:block;margin:8px 0;color:#536b60}
+.shared-record a{display:block;margin:10px 0}
+.shared-record button{margin-top:8px;font-size:12px}
+#sharedReceipt{padding:14px;margin-top:18px;background:#e9f4eb;border:1px solid #a4c9b0;border-radius:6px;overflow-wrap:anywhere}
+#sharedReceipt h3{margin-top:0}
+#sharedReceipt a{font-weight:600;color:var(--ink)}
+#sharedTaskDownloads a{display:inline-block;background:var(--accent);color:#fff;padding:11px 16px;border-radius:5px;margin:12px 0;font-weight:600}
+#sharedFixSection button{margin:4px 6px 4px 0}
+#sharedDevForm{background:#fff4d5;padding:8px 12px;border-radius:4px;margin:12px 0}
+#sharedDevForm label{margin:5px 0!important}
+#sharedDevForm small{display:block;margin:6px 0}
+#sharedPending{font-size:12px}
+.shared-retry{justify-content:space-between;border-bottom:1px solid var(--line);padding:7px 0}
+#sharedSourceFallback{padding:12px;border:1px solid #d5ac61;border-radius:6px;background:#fff9e9}
+#sharedProposalPanel{padding-bottom:15px;border-bottom:2px solid var(--line)}
+#sharedProposalPanel h3{margin:6px 0 10px;font-size:18px}
+#sharedProposalPanel p,#sharedProposalPanel small{display:block;line-height:1.5;overflow-wrap:anywhere;white-space:pre-wrap}
+#sharedProposalPanel strong{display:block;margin-top:14px}
+#sharedProposalPanel label{display:block;margin:14px 0 7px}
+#sharedProposalPanel textarea{margin-top:7px}
+#sharedProposalPanel details{padding:10px 0;background:transparent}
+#sharedProposalPanel img{width:100%;height:auto;margin:10px 0}
+#sharedProposalPanel pre{font-size:11px;white-space:pre-wrap;overflow-wrap:anywhere}
+.shared-code-comparison{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.shared-code-comparison section{min-width:0}
+.shared-code-comparison h4{font-size:12px;margin:8px 0}
+.shared-code-comparison pre{max-height:350px;overflow:auto;padding:8px;background:#f4f5f0;border:1px solid var(--line)}
+.shared-decision-buttons{display:flex;gap:6px;flex-wrap:wrap}
+.shared-decision-buttons button{font-size:12px}
+.shared-proposal-state{font-size:12px;color:#536b60}
+#sharedHandoffText{font-size:12px;line-height:1.5}
+.shared-local-tools{display:none}
+@media(max-width:1000px){
+  .shared-work-selected .primary-actions #openPackage,.shared-work-selected .primary-actions #exportTask,.shared-work-selected .primary-actions #finishReview{display:none}
+  .shared-work-selected .shared-local-tools{display:flex;gap:8px;flex-wrap:wrap;padding:8px 12px}
+}
+@media(max-width:650px){.shared-paths{grid-template-columns:1fr}#sharedDialog{padding:16px}#sharedDialog .dialog-head h2{font-size:22px}}

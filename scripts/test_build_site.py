@@ -66,7 +66,9 @@ class ContributorBuild(unittest.TestCase):
                      "contributor/score/runtime/reviewer.json", "contributor/score/local.pdf",
                      "contributor/score/response.zip", "contributor/score/screenshot.png",
                      "contributor/score/server.log", "contributor/score/vendor/debug.js",
-                     "contributor/search/index.html"]
+                     "contributor/search/index.html", "service/server.py",
+                     "service/private.sqlite", "service/.env",
+                     "contributor/score/qa/shared-packages.test.mjs"]
         for relative in forbidden:
             path = self.root / relative
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -194,7 +196,8 @@ class ContributorBuild(unittest.TestCase):
                 self.assertTrue((module.parent / relative).is_file(), (module, relative))
         score = self.output / "contributor/score"
         for relative in ("vendor/pdf.worker.mjs", "vendor/pdf-lib.min.js", "vendor/jszip.min.js",
-                         "HANDOFF_FORMATS.md", "project-guidance/AGENTS.md", "project-guidance/HANDBOOK.md"):
+                         "HANDOFF_FORMATS.md", "shared-client.js", "shared-ui.js", "shared-packages.js",
+                         "shared-config.json", "project-guidance/AGENTS.md", "project-guidance/HANDBOOK.md"):
             self.assertTrue((score / relative).is_file(), relative)
         for folder in ("cmaps", "standard_fonts", "wasm", "iccs"):
             self.assertTrue(any((score / "vendor" / folder).iterdir()), folder)

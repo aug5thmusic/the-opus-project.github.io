@@ -68,6 +68,10 @@ Each finding should have a visible state: **Open**, **Corrected pending review**
 
 If an error is found after publication, link the report to the affected revision, correct LilyPond, review the correction, and release a new current version. Keep earlier release history.
 
+Score Desk contributions are independent: report one finding, submit a scoped review, supply an AI response to a shared correction task, or review selected proposed fixes. Nobody must finish the entire cycle. A clean review requires an explicit declaration and scope; it never closes another person's report. Shared submissions have durable receipts and authenticated identities. A typed display name or imported Discussion attribution is not authenticated identity.
+
+A correction task captures an immutable shared snapshot and its outstanding finding versions. Historical findings keep their original rendering and context; old coordinates must never be treated as coordinates on a different PDF. Reports arriving later remain outstanding. A proposed fix, approval of that exact candidate, and application to the canonical repository are separate events. Approval alone does not resolve an error in the published score. Review-only contributions preserve LilyPond unchanged. Human verification remains limited to an eligible Step 3 score with complete coverage and an authorized identified verifier's approval of the exact revision.
+
 ## Archive record and derived formats
 
 Retain the composer, title, catalogue number, instrumentation, movements and version, transcription boundaries, edition/editor/arranger/publisher/date where known, exact scan URL or identifier and page range, and a documented eligibility basis with jurisdiction. Record contributors, canonical revision, LilyPond version, review coverage, verifier/date, open findings, source notes, output filenames, build or conversion versions, validation results, and limitations. Unknown fields remain unknown; do not invent them.

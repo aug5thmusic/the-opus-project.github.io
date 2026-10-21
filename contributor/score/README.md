@@ -1,8 +1,28 @@
 # OPUS proofreading and package workspace
 
-This is the integrated, browser-only version of the reviewed Score Desk. Open
-`contributor/score/` through the project's local preview or deployed static site.
-No account, notation installation, or backend is needed for these features.
+Open `contributor/score/` through the project's preview or static site. Reading,
+local drafting, brush editing and recovery work without an account. Shared
+submissions require the owner-configured [project service](../../service/README.md)
+and GitHub sign-in. The checked-in service configuration is inactive; the UI
+does not claim local saves were submitted.
+
+Choose **Project contributions** for four separate ways to help:
+
+- **Report an error**: type or highlight one finding, then **Submit findings**.
+  A durable receipt means you can leave; no full review or PR is required.
+- **Review this score**: declare a partial or whole-work scope and either submit
+  findings or explicitly declare **No errors found in the reviewed scope**.
+- **Help fix reported errors**: **Get correction package**, attach the ZIP to
+  your chosen AI, paste its instructions, then **Return AI response**. Someone
+  else can judge the music.
+- **Review proposed fixes**: open a proposal beside the source and record a
+  decision for any subset of its findings. Unchecked items remain available.
+
+The service supplies the exact files and includes everyone's outstanding
+findings in a correction task. If the source library cannot be reached, select
+its one original PDF; its digest must match the recorded edition. Shared receipt
+links reopen reports and proposals on another device. A typed display name is
+optional and is distinguished from the authenticated author.
 
 Open one package, or select the source PDF, rendered PDF and LilyPond file once.
 Type notes or mark passages. **Send for corrections** supplies the exact files,
@@ -11,7 +31,9 @@ response** retains a proposal; **Review this returned revision** opens it for
 human comparison. **Finish review** records an explicit review scope and
 packages the findings, revision hashes and available history automatically.
 
-Files are processed in this browser. The app does not execute LilyPond, imported
+Local files are processed in this browser until an explicit shared submission.
+Shared reports and packages retain their exact context in the project service.
+The app does not execute LilyPond, imported
 scripts, or an AI model. A separately instructed correcting agent may use an
 already-installed LilyPond to return an updated PDF; its declared compiler and
 file pairing remain unverified until reviewed. Existing encodings are never a
@@ -23,6 +45,13 @@ the browser profile and origin, including the port. Existing prototype data is
 not silently migrated between origins. Export a recovery or completed package
 from the old origin, then use **Open package** here. Keep downloaded backups.
 Opening a package does not claim human verification or complete review coverage.
+
+Shared records live in durable service storage. A separate local outbox retains
+failed or uncertain submissions for safe retry using the same request identity;
+it contains no authentication tokens. **Saved locally**, **Submitted to the
+project**, **Awaiting review**, and **Applied to the project** are distinct states.
+Human approval of a proposal is not application to the current published score.
+A new report submitted during a correction task is retained for a later package.
 
 The package contracts and limits are documented in [HANDOFF_FORMATS.md](HANDOFF_FORMATS.md).
 PDF.js, pdf-lib and JSZip are vendored with their licenses so the app does not
