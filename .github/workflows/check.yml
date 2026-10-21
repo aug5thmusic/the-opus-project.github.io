@@ -16,6 +16,15 @@ jobs:
         run: python3 scripts/check.py
       - name: Test pull-request checker
         run: python3 -B scripts/test_check_pr.py
+      - name: Test contributor site packaging
+        run: python3 -B scripts/test_build_site.py
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Check browser modules and contributor links
+        run: |
+          node contributor/score/qa/check-integration.cjs
+          node contributor/tests/work-links.test.mjs
       - name: Validate transcription provenance
         env:
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}

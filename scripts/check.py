@@ -127,7 +127,7 @@ def expected_catalog() -> tuple[dict[str, object], list[Path]]:
                 "step": step,
                 "verified_by": data["verified_by"],
                 "lilypond_url": current_relative,
-                "pdf_url": str(Path(current_relative).with_suffix(".pdf")),
+                "pdf_url": Path(current_relative).with_suffix(".pdf").as_posix(),
                 "source_page": data["source_page"],
                 "source_pdf": data["source_pdf"],
                 "crosscheck_name": data["crosscheck_name"],

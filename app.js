@@ -52,6 +52,8 @@ function render(query = '') {
     pdf.href = score.pdf_url;
     const compare = addText(links, 'a', '', 'Compare PDFs');
     compare.href = `proofread.html?piece=${encodeURIComponent(score.slug)}`;
+    const desk = addText(links, 'a', '', 'Mark errors');
+    desk.href = `contributor/?piece=${encodeURIComponent(score.slug)}`;
     row.append(links);
     catalogNode.append(row);
   }

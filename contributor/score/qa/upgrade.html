@@ -1,0 +1,5 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>Score Desk v2 upgrade regression</title>
+<style>body{font:14px system-ui;margin:24px}pre{white-space:pre-wrap}.fail{color:#a00}iframe{width:100%;height:900px}a{display:block;margin:12px}</style>
+<h1>Real pre-completion v2 → current client regression</h1><p>Requires a fresh isolated origin. Never reset a database. Open the historical tab first, then Run. The actual updated app is loaded only after the v2 client has saved and retained its connection.</p>
+<a id="openOld" target="score-desk-historical-v2">Open historical version-2 test tab</a><button id="run" disabled>Run v2 upgrade regression</button><pre id="results"></pre><div id="artifacts"></div><iframe id="app" title="Actual updated Score Desk (not loaded until v2 is initialized)"></iframe>
+<script src="../vendor/jszip.min.js"></script><script type="module" src="upgrade-tests.js"></script></html>

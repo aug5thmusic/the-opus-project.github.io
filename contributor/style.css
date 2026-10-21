@@ -1,0 +1,11 @@
+.eyebrow { color: var(--accent); font-size: .75rem; letter-spacing: .12em; font-weight: 700; }
+.intro h1 { max-width: 750px; line-height: 1.18; }
+.actions { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin: 18px 0; }
+.primary-link { display: inline-block; background: var(--accent); color: var(--page); font-weight: 700; padding: 10px 16px; border-radius: 3px; }
+.primary-link:hover { color: var(--page); text-decoration: underline; }
+.privacy { color: var(--muted); font-size: .9rem; }
+.entry-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 20px; }
+.entry-grid .panel { margin-top: 0; }
+.workflow li { padding-bottom: 8px; }
+[hidden] { display: none !important; }
+@media(max-width:720px) { .entry-grid { grid-template-columns: 1fr; } .actions { align-items: flex-start; } }
