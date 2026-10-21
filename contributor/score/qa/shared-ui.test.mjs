@@ -1,9 +1,55 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createCurrentWorkReader, matchingReportDraft} from '../shared-ui.js';
+import {createCurrentWorkReader, matchingReportDraft, proposalApplications, proposalFindingState, proposalReportIdentity, reportFindingSelection} from '../shared-ui.js';
 
 const deferred = () => { let resolve, reject; const promise = new Promise((ok, fail) => { resolve = ok; reject = fail; }); return {promise, resolve, reject}; };
 const work = slug => ({workId: slug, work: {slug}, current: {snapshotId: `snapshot-${slug}`}});
+
+test('partial application never labels an entire proposal applied or transfers application to another finding', () => {
+  const record = {findings: [{id: 'one'}, {id: 'two', decision: {state: 'looks_correct'}}, {id: 'three', decision: {state: 'needs_correction'}}], applied: [{findingIds: ['one']}, {findingIds: ['one', 'unrelated']}]};
+  const partial = proposalApplications(record);
+  assert.equal(partial.applied, 1); assert.equal(partial.total, 3); assert.equal(partial.complete, false);
+  assert.equal(proposalFindingState(record, 'one'), 'Applied to the project');
+  assert.equal(proposalFindingState(record, 'two'), 'Looks correct · awaiting application');
+  assert.equal(proposalFindingState(record, 'three'), 'Still needs correction');
+  record.applied.push({findingIds: ['two', 'three']}); assert.equal(proposalApplications(record).complete, true);
+  assert.equal(proposalApplications({findings: [], applied: []}).complete, false);
+});
+
+test('a new PDF revision starts its own review and application status', () => {
+  const original = {id: 'old', findings: [{id: 'one', decision: {state: 'looks_correct'}}], applied: [{findingIds: ['one']}]};
+  const child = {id: 'new', parentProposalId: 'old', findings: [{id: 'one', decisions: []}], applied: []};
+  assert.equal(proposalApplications(original).complete, true);
+  assert.equal(proposalApplications(child).applied, 0); assert.equal(proposalApplications(child).complete, false);
+  assert.equal(proposalFindingState(child, 'one'), 'Waiting to be checked');
+});
+
+test('reports on returned corrections bind the exact candidate and never the pending baseline', () => {
+  const review = {snapshotId: 'candidate', files: {source: {sha256: 'source'}, rendered: {sha256: 'new-pdf'}, ly: {sha256: 'new-code'}}};
+  const loaded = {seed: {}, proposal: {id: 'child', candidateCurrent: structuredClone(review)}};
+  assert.equal(proposalReportIdentity(loaded, review), 'child');
+  assert.equal(proposalReportIdentity(null, review), null);
+  assert.throws(() => proposalReportIdentity({...loaded, seed: null}, review), /Add the proposed PDF/);
+  assert.throws(() => proposalReportIdentity(loaded, {...review, snapshotId: 'baseline'}), /displayed score differs/);
+  for (const role of ['source', 'rendered', 'ly']) {
+    const different = structuredClone(review); different.files[role].sha256 = 'different';
+    assert.throws(() => proposalReportIdentity(loaded, different), /displayed score differs/);
+  }
+});
+
+test('coverage can reference known findings while quick reports suppress them without losing the reviewer’s selection', () => {
+  const known = ['one', 'two'].map(id => ({id, submitted: true, checked: false, ...reportFindingSelection({submitted: true, checked: false}, false)}));
+  assert.ok(known.every(finding => !finding.checked && finding.disabled));
+  assert.ok(known.every(finding => reportFindingSelection(finding, true).checked));
+  known[0].coverageChecked = true; known[1].coverageChecked = false;
+  assert.deepEqual(known.map(finding => reportFindingSelection(finding, true).checked), [true, false]);
+  const quick = known.map(finding => ({...finding, ...reportFindingSelection(finding, false)}));
+  assert.ok(quick.every(finding => !finding.checked && finding.disabled));
+  const draft = {version: 1, workId: 'work', snapshotId: 'exact', mode: 'report', scope: 'partial', clean: false, scopeNote: 'Second system', displayName: '', discussionUrl: '', discussionAuthor: '', discussionSummary: '', findings: quick.map(({id, checked, coverageChecked}) => ({id, checked, coverageChecked, kind: 'transcription'}))};
+  const restored = matchingReportDraft(JSON.parse(JSON.stringify(draft)), {workId: 'work', snapshotId: 'exact', mode: 'report', findingIds: ['one', 'two']});
+  assert.deepEqual(restored.findings.map(finding => reportFindingSelection({...finding, submitted: true}, true).checked), [true, false]);
+  assert.deepEqual(reportFindingSelection({submitted: false, checked: false}, false), {checked: false, disabled: false});
+});
 
 test('a delayed work A cannot replace selected work B or supply B’s action baseline', async () => {
   let selected = 'a'; const reads = [];

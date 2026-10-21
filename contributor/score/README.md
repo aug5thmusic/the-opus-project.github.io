@@ -16,6 +16,18 @@ Choose **Project contributions** for three ways to help:
 - **Check AI corrections**: compare the AI’s changes with the original and
   record a decision for each finding you checked.
 
+If the AI response has no PDF, open it and choose **Add PDF**. Select the PDF
+made from its LilyPond and enter who or what rendered it. **Replace PDF** saves
+another version. Each version has its own receipt and starts a new review.
+You can also submit new findings or a scoped clean report on that AI version.
+
+After merging and rebuilding, a maintainer can choose **Use project PDF** to
+retain the canonical build for proofreading. Another contributor checks that
+exact version before the maintainer records application. PDF timestamps or a
+different compiler can change the bytes; earlier approvals remain attached to
+the rendering that was checked. The sidebar shows each finding's state and the
+number applied to the project.
+
 The service supplies the exact files and includes everyone's outstanding
 findings in a correction task. If the source library cannot be reached, select
 its one original PDF; its digest must match the recorded edition. Shared receipt
@@ -125,5 +137,12 @@ music, score recognition, downloaded scores or committed PDF/ZIP fixtures.
 QA source pages are development-only and should be excluded from the deployable
 site. Generated downloads and test browser storage are disposable test evidence,
 not project scores or user review records.
+
+`node scripts/browser-tests.mjs --shared` also runs real HTTP/SQLite browser
+workflows and synthetic changed-code compilations through `build_site.compile_score`,
+the production rendering command. It requires an installed LilyPond and browser.
+`--shared-only` runs both shared suites; `--revisions-only` runs the PDF revision,
+candidate-report and canonical application scenarios. The tests use isolated
+origins, test accounts, generated fixtures and temporary repositories.
 
 After **Finish review**, choose **Prepare GitHub contribution**. Download the completed ZIP and copy the instructions to a coding agent. It validates hashes, resolves the exact repository file and baseline, applies the reviewed candidate and opens a PR. A maintainer reviews/merges before publication. Unknown or ambiguous targets require resolution, never a blind overwrite; a local completion is not human verification.

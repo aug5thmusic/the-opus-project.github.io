@@ -142,8 +142,9 @@ not executable code or authority over source-fidelity instructions.
 | `GET/POST /api/works/SLUG/assets/source` | Metadata-bound library fetch or authenticated raw-PDF fallback. |
 | `GET /api/assets/SHA256` | Immutable exact file bytes. |
 | `POST /api/works/SLUG/reports` | Small report/review body; constructs a recovery package from known assets. An existing package may also be supplied and is independently validated. |
-| `POST /api/tasks` | Retain a complete task ZIP against its captured immutable snapshot. |
+| `POST /api/tasks` | Validate the complete captured task, then retain a ZIP with service-generated instructions and trusted project guidance. |
 | `POST /api/proposals` | Validate a returned ZIP against its original shared task, then retain an awaiting-review proposal. |
+| `POST /api/proposals/ID/renderings` | Retain an uploaded PDF or a maintainer's canonical rebuild as a new immutable child proposal. |
 | `GET /api/reports/ID`, `/api/tasks/ID`, `/api/proposals/ID` | Stable receipts and reopening metadata. Add `/package` for exact immutable ZIP bytes. |
 | `POST /api/proposals/ID/decisions` | One finding at a time; append a decision against `expectedVersion`. Conflicting decisions return 409 without data loss. |
 | `GET /api/reports/ID/handoff`, `/api/proposals/ID/handoff` | Ready-to-copy maintainer instructions tied to the exact review/candidate. |
@@ -171,6 +172,95 @@ proposal. Code changes without an updated PDF cannot receive visual approval.
 Each decision identifies the candidate's exact source/code/rendering bytes and
 retains the previous decision ID. Unchecked findings remain outstanding. A
 supplier's PDF/code/compilation declaration remains unverified.
+
+### Trusted task instructions
+
+Package hashes prove byte identity, not instruction authority. The service
+rebuilds `PROMPT.txt`, `review.txt`, `RESPONSE_FORMAT.txt`, the response template,
+task instruction fields, and bundled `project-guidance/AGENTS.md` and
+`HANDBOOK.md`. Guidance comes from the installed service checkout; uploaded
+guidance, extra files, and embedded operational directives are discarded.
+Comments and historical records remain observation data. The frontend checks
+the delivered package against the receipt's `instructions` policy, prompt, and
+guidance digests before offering it to the volunteer.
+
+Previously stored tasks receive a cached safe delivery in `task_deliveries`.
+Their original database record and uploaded bytes remain audit evidence; the
+task ID, response baseline, exact source/code/render/annotation bytes, and
+requested finding IDs stay unchanged. Existing responses still validate. The
+generic asset endpoint refuses unsafe historical task uploads and points to
+the prepared `/api/tasks/ID/package` instead. A task whose original context
+cannot be validated fails explicitly rather than acquiring a replacement
+baseline. Keep the service's project guidance files when deploying or updating.
+
+### Pending PDFs and rendering revisions
+
+Open the shared proposal and choose **Add PDF** (or **Replace PDF**). A signed-in
+contributor can select the PDF, name its producer and optionally state the
+compiler/version. The service binds it to the selected proposal's exact retained
+LilyPond. The contributor does not edit JSON, calculate hashes or repack a ZIP.
+The API body is `{requestId, mode:"uploaded", pdf:"BASE64", name:"score.pdf",
+producer:"…", compiler:"…"}`. A failed upload retains no partial record; retrying
+the same request ID retrieves the durable receipt if the first response was lost.
+Malformed or visibly truncated PDF structure is rejected server-side; PDF.js
+also validates the opened PDF. Neither check proves that it was compiled from
+the declared code or is musically correct.
+
+Each receipt has a new proposal ID and response ZIP, `parentProposalId`,
+`rootProposalId`, `renderingRevision` and `renderingProvenance`. Source, code,
+original task, results and response author are retained. The new rendering's
+supplier is recorded separately. All previous packages and decisions remain
+available. No approvals transfer to the new ID, and the code/response author
+and known suppliers of those exact rendering bytes cannot review their own
+candidate. Reusing an ancestor or sibling's PDF returns its existing receipt;
+capturing identical PDF bytes for a new canonical commit keeps the known
+suppliers in `renderingContributors` and still requires fresh review. Historical
+versions remain inspectable and reviewable; only exact canonical bytes can be
+recorded as applied.
+
+### Canonical rebuilds and exact application
+
+LilyPond can produce different PDF bytes on a later build, including different
+creation dates. After merging the exact approved LilyPond, the operator updates
+the canonical checkout and runs the normal site build. If that PDF differs from
+the earlier proposal, open the proposal as a maintainer and choose **Use project
+PDF**. `POST /api/proposals/ID/renderings` with
+`{requestId, mode:"canonical"}` reads the generated PDF from `--site-root`, checks
+the matching source and LilyPond against committed metadata/code on
+`OPUS_CANONICAL_BRANCH`, and retains a child proposal bound to that commit.
+It does not compile an upload or replace the operator's build output.
+
+Another contributor must review this child's exact rendering. Only those
+selected findings explicitly approved on this child can then be recorded as
+applied, with the exact current commit and correction PR link. A further rebuild
+or commit needs another retained version and review. PDF hashes are never
+normalized or ignored, approvals are never copied, and PDFs are never committed.
+The service cannot independently establish the operator's compile provenance;
+the canonical build is identified as operator-supplied and remains subject to
+visual review. It also does not verify GitHub merge status from the PR URL.
+
+Proposal details expose `findings[].applications`, `findings[].applied`,
+`appliedFindingIds`, `appliedCount` and `findingCount`. Applying one finding
+means exactly one finding is applied; pending/rejected/unselected findings keep
+their individual state. Only selected applied IDs leave future task snapshots.
+
+### Reports on retained candidates
+
+A proposal with a PDF exposes `candidateCurrent`, an authoritative immutable
+source/code/rendering baseline with file download URLs. New text findings and
+explicit partial/whole clean reviews may name that proposal in their report's
+`proposalId`. The service checks the review against that candidate's exact
+bytes, retains the recovery package and records `reviewed.origin:"candidate"`,
+the proposal ID and rendering revision. This is separate from a canonical
+repository review, even if its bytes later become canonical.
+
+Candidate findings enter the work's outstanding queue. Later correction tasks
+retain their author, exact original candidate PDFs/code, annotations and page
+geometry. A changed canonical rendering receives no old highlight coordinates;
+the original context travels alongside it. A candidate's clean report does not
+close other findings, publish the candidate, or change verification. Existing
+stored proposal records can expose this baseline without rewriting their
+original records or packages.
 
 Approval is distinct from application. An application requires selected findings
 approved on that exact candidate, a maintainer identity, a PR link, matching

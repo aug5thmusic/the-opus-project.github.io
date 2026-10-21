@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import binascii
 import hashlib
 import http.client
 import io
@@ -31,6 +32,7 @@ import zipfile
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from task_instructions import build_delivery, POLICY_VERSION as TASK_INSTRUCTION_POLICY
 
 ROOT = Path(__file__).resolve().parents[1]
 MAX_FILE = 100 * 1024 * 1024
@@ -40,6 +42,24 @@ HASH = re.compile(r"^[a-f0-9]{64}$")
 ID = re.compile(r"^[A-Za-z0-9_-]{1,100}$")
 SLUG = re.compile(r"^[a-z0-9][a-z0-9-]{0,100}$")
 COLORS = {"#ffd34d", "#65d6a3", "#74b9ff", "#f49ac2", "#b7a2ff"}
+
+
+def supported_pdf(data):
+    """Reject truncated/obviously invalid PDFs without claiming visual validity.
+
+    Full PDF/page validation remains PDF.js's job. Both traditional xref tables
+    and PDF 1.5+ xref streams are supported; never execute or compile uploads.
+    """
+    if not (64 < len(data) <= MAX_FILE and re.match(rb"%PDF-(?:1\.[0-7]|2\.0)[\r\n]", data)):
+        return False
+    trailer = re.search(rb"startxref\s+([0-9]{1,10})\s+%%EOF\s*$", data[-65536:])
+    if not trailer:
+        return False
+    offset = int(trailer[1])
+    if offset >= len(data):
+        return False
+    target = data[offset:offset+2048]
+    return target.startswith(b"xref") or bool(re.match(rb"[0-9]+\s+[0-9]+\s+obj\s*<<", target) and re.search(rb"/Type\s*/XRef\b", target))
 
 
 class Problem(Exception):
@@ -424,9 +444,17 @@ class Store:
         with self.db(write=True) as db:
             def operation():
                 self.current(db, slug)
-                original = db.execute("SELECT body FROM revisions WHERE work=? AND snapshot=?", (slug, review.get("snapshotId"))).fetchone()
-                require(original, "This review does not match a known exact project revision. Open the shared work before reporting; preserve this local review as a recovery package.", 409)
-                original = json.loads(original[0])
+                provenance = {}
+                if body.get("proposalId") is not None:
+                    proposal = self.record(db, body["proposalId"], "proposal")
+                    require(proposal["workId"] == slug, "Proposal belongs to another work.")
+                    original = self.candidate_revision(db, proposal)
+                    require(original, "Attach a rendering to this candidate before submitting its visual review.", 409)
+                    provenance = {"origin": "candidate", "proposalId": proposal["id"], "rootProposalId": proposal.get("rootProposalId", proposal["id"]), "renderingRevision": proposal.get("renderingRevision", 1)}
+                else:
+                    original = db.execute("SELECT body FROM revisions WHERE work=? AND snapshot=?", (slug, review.get("snapshotId"))).fetchone()
+                    require(original, "This review does not match a known exact project revision. Candidate reviews must identify their shared proposal. Open the shared work before reporting; preserve this local review as a recovery package.", 409)
+                    original = json.loads(original[0])
                 validate_review(review, original["files"], original["snapshotId"])
                 for f in review["findings"]:
                     require(f.get("state") in ("open", "needs_source_clarification"), "A submitted report cannot mark another person's work resolved.")
@@ -437,7 +465,7 @@ class Store:
                     annotation = {**annotation, "color": annotation.get("color", annotation["strokes"][0]["color"] if annotation["strokes"] else "#ffd34d")}
                     kind = kinds.get(annotation["id"], "clarification" if annotation["state"] == "needs_source_clarification" else "transcription")
                     require(kind in ("transcription", "source_error", "clarification"), "Unknown finding kind.")
-                    finding_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"opus:{user['id']}:{slug}:{review['snapshotId']}:{annotation['id']}"))
+                    finding_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"opus:{user['id']}:{slug}:{review['snapshotId']}:{annotation['id']}" + (":"+provenance["proposalId"] if provenance else "")))
                     # Stable local identity prevents duplicates after a lost acknowledgement,
                     # even if a client accidentally generates a fresh request ID.
                     existing = None
@@ -450,12 +478,13 @@ class Store:
                             break
                     if existing:
                         continue
-                    values.append({"id": finding_id, "version": 1, "originalId": annotation["id"], "reportId": ident, "author": user, "displayName": label, "comment": annotation["comment"], "kind": kind, "reviewed": {"snapshotId": review["snapshotId"], "sourceSha256": review["files"]["source"]["sha256"], "codeSha256": review["files"]["ly"]["sha256"], "renderSha256": review["files"]["rendered"]["sha256"]}, "annotation": annotation, "pages": review["pages"], "state": "needs_source_clarification" if kind != "transcription" else "open", "reportPackage": f"/api/reports/{ident}/package" if raw else None, "discussion": discussion})
+                    values.append({"id": finding_id, "version": 1, "originalId": annotation["id"], "reportId": ident, "author": user, "displayName": label, "comment": annotation["comment"], "kind": kind, "reviewed": {"snapshotId": review["snapshotId"], "sourceSha256": review["files"]["source"]["sha256"], "codeSha256": review["files"]["ly"]["sha256"], "renderSha256": review["files"]["rendered"]["sha256"], **provenance}, "annotation": annotation, "pages": review["pages"], "state": "needs_source_clarification" if kind != "transcription" else "open", "reportPackage": f"/api/reports/{ident}/package" if raw else None, "discussion": discussion})
                 finding_ids = existing_ids + [f["id"] for f in values]
                 for prior in prior_reports:
                     if (prior["author"]["id"] == user["id"] and prior["reviewed"]["snapshotId"] == review["snapshotId"]
                             and sorted(prior.get("findingIds", [f["id"] for f in prior["findings"]])) == sorted(finding_ids)
                             and prior["scope"] == {"kind": scope["kind"], "description": description} and prior["clean"] == clean
+                            and prior["reviewed"].get("proposalId") == provenance.get("proposalId")
                             and prior.get("displayName") == label and prior.get("discussion") == discussion):
                         return prior
                 # Recovery ZIPs can be rebuilt from already registered immutable
@@ -475,7 +504,7 @@ class Store:
                     report_raw = output.getvalue()
                 for finding in values:
                     finding["reportPackage"] = f"/api/reports/{ident}/package"
-                report = {"id": ident, "workId": slug, "createdAt": stamp, "author": user, "displayName": label, "scope": {"kind": scope["kind"], "description": description}, "clean": clean, "reviewed": {"snapshotId": review["snapshotId"], "files": review["files"], "repositoryRevision": original["repositoryRevision"]}, "findings": values, "findingIds": finding_ids, "referencedFindingIds": existing_ids, "discussion": discussion, "status": "submitted", "verification": "Not verified", "packageSha256": self.put_blob(db, report_raw, "application/zip"), "url": f"/api/reports/{ident}"}
+                report = {"id": ident, "workId": slug, "createdAt": stamp, "author": user, "displayName": label, "scope": {"kind": scope["kind"], "description": description}, "clean": clean, "reviewed": {"snapshotId": review["snapshotId"], "files": review["files"], "repositoryRevision": original["repositoryRevision"], **provenance}, "findings": values, "findingIds": finding_ids, "referencedFindingIds": existing_ids, "discussion": discussion, "status": "submitted", "verification": "Not verified", "packageSha256": self.put_blob(db, report_raw, "application/zip"), "url": f"/api/reports/{ident}"}
                 self.insert(db, "report", slug, report)
                 return report
             return self.idempotent(db, user, body.get("requestId"), {k: v for k, v in body.items() if k != "package"}, operation, f"reports:{slug}")
@@ -530,10 +559,151 @@ class Store:
                         require(finding.get("page") == annotation["page"] and finding.get("currentAnchor") == {"findingId": finding["id"], "page": annotation["page"], "bounds": annotation["bounds"], "comment": annotation["comment"]}, "Current task anchor differs from its exact annotation.")
                 require({f["id"] for f in review["findings"]}.issubset(expected), "Task contains unrelated current annotations.")
                 require(not db.execute("SELECT 1 FROM records WHERE id=?", (task["id"],)).fetchone(), "This immutable task ID already exists.", 409)
-                value = {"id": task["id"], "kind": "task", "workId": snapshot["workId"], "snapshotId": snapshot["id"], "createdAt": now(), "author": user, "task": task, "baseline": baseline, "packageSha256": self.put_blob(db, raw, "application/zip"), "packageUrl": f"/api/tasks/{task['id']}/package", "repositoryRevision": current["repositoryRevision"]}
+                value = {"id": task["id"], "kind": "task", "workId": snapshot["workId"], "snapshotId": snapshot["id"], "createdAt": now(), "author": user, "task": task, "baseline": baseline, "packageUrl": f"/api/tasks/{task['id']}/package", "repositoryRevision": current["repositoryRevision"], "submittedPackageSha256": digest(raw)}
+                try:
+                    safe_raw, safe_task, instructions = build_delivery(value, snapshot, payloads, manifest, review)
+                except (ValueError, KeyError, TypeError, OSError) as error:
+                    raise Problem("The original task cannot be prepared safely. Its reviewed files and findings must be preserved.", 409) from error
+                # Client-authored prompts, task directives, and guidance never
+                # become the project's operational instructions or download.
+                package(safe_raw)
+                value.update(task=safe_task, instructions=instructions, packageSha256=self.put_blob(db, safe_raw, "application/zip"))
                 self.insert(db, "task", snapshot["workId"], value)
                 return value
-            return self.idempotent(db, user, body.get("requestId"), body, operation, "tasks")
+            return self.task_delivery(db, self.idempotent(db, user, body.get("requestId"), body, operation, "tasks"))
+
+    def candidate_revision(self, db, proposal):
+        """A retained candidate is a review baseline, never a canonical revision.
+
+        Derive old records lazily from their immutable task and content-addressed
+        blobs. This also lets existing installations review retained proposals
+        without rewriting their records or packages.
+        """
+        if proposal.get("candidateCurrent"):
+            return proposal["candidateCurrent"]
+        candidate = proposal["candidate"]
+        if not candidate.get("renderSha256"):
+            return None
+        task = self.record(db, proposal["taskId"], "task")
+        snapshot = self.record(db, task["snapshotId"], "snapshot")
+        baseline = snapshot["current"]
+        response = proposal["response"]
+        files = {}
+        for role, key in (("source", "sourceSha256"), ("ly", "codeSha256"), ("rendered", "renderSha256")):
+            sha = candidate[key]
+            row = db.execute("SELECT length(data) FROM blobs WHERE sha=?", (sha,)).fetchone()
+            require(row, "The retained candidate is missing an immutable asset.", 409)
+            name = baseline["files"][role]["name"]
+            if role == "ly" and response["code"]["status"] == "changed":
+                name = response["code"]["path"].rsplit("/", 1)[-1]
+            if role == "rendered" and response["rendering"]["status"] == "supplied":
+                name = response["rendering"]["path"].rsplit("/", 1)[-1]
+            files[role] = {"name": name, "sha256": sha, "size": row[0], "url": "/api/assets/"+sha, "available": True}
+        return {"snapshotId": candidate["snapshotId"], "files": files, "repositoryRevision": None,
+                "path": baseline["path"], "step": baseline["step"], "source": baseline["source"],
+                "relationship": "supplier-declared; not established by compilation",
+                "origin": {"kind": "proposal", "proposalId": proposal["id"], "rootProposalId": proposal.get("rootProposalId", proposal["id"]), "renderingRevision": proposal.get("renderingRevision", 1)}}
+
+    def canonical_commit(self, slug, current, candidate):
+        """Prove the code and edition are committed in the configured checkout."""
+        require(re.fullmatch(r"[a-f0-9]{40}", current["repositoryRevision"] or ""), "The canonical code and source metadata must be committed before retaining its rebuild.", 409)
+        try:
+            committed_code = subprocess.check_output(["git", "show", f"HEAD:{current['path']}"], cwd=self.repo, stderr=subprocess.DEVNULL, timeout=10)
+            committed_metadata = json.loads(subprocess.check_output(["git", "show", f"HEAD:pieces/{slug}/metadata.json"], cwd=self.repo, stderr=subprocess.DEVNULL, timeout=10))
+            branch = subprocess.check_output(["git", "branch", "--show-current"], cwd=self.repo, stderr=subprocess.DEVNULL, text=True, timeout=5).strip()
+            head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=self.repo, stderr=subprocess.DEVNULL, text=True, timeout=5).strip()
+        except (OSError, ValueError, subprocess.SubprocessError):
+            raise Problem("Cannot verify the canonical committed LilyPond revision.", 409) from None
+        require(head == current["repositoryRevision"] and branch == os.environ.get("OPUS_CANONICAL_BRANCH", "main") and digest(committed_code) == candidate["codeSha256"] and committed_metadata == self.metadata(slug) and committed_metadata.get("source_sha256") == candidate["sourceSha256"], "Application requires the exact committed candidate and source metadata on the operator's configured canonical branch; uncommitted files and other branches are not publication.", 409)
+        return current["repositoryRevision"]
+
+    def attach_rendering(self, ident, body, user):
+        require(isinstance(body, dict) and body.get("mode") in ("uploaded", "canonical"), "Choose an uploaded PDF or the canonical rebuild.")
+        require(not any(key in body for key in ("author", "candidate", "status", "applied", "compilationVerified")), "Rendering identity and review state are assigned by the service.", 403)
+        mode = body["mode"]
+        if mode == "canonical":
+            require("maintainer" in user.get("roles", []), "Only a configured maintainer can retain the operator's canonical rebuild.", 403)
+            require(not any(k in body for k in ("pdf", "name", "producer", "compiler")), "The canonical rendering is read from the operator's build, not from supplied fields.")
+        else:
+            name = text(body.get("name"), "PDF filename", 250)
+            require(not any(c in name for c in ("/", "\\", "\x00")) and name.lower().endswith(".pdf"), "Choose a PDF file.")
+            producer = text(body.get("producer"), "rendering producer", 500)
+            compiler = text(body["compiler"], "compiler declaration", 500, True) if body.get("compiler") is not None else None
+            require(isinstance(body.get("pdf"), str) and len(body["pdf"]) <= ((MAX_FILE+2)//3)*4, "PDF exceeds the supported size.", 413)
+            try:
+                pdf = base64.b64decode(body["pdf"], validate=True)
+            except (ValueError, binascii.Error):
+                raise Problem("The PDF upload is incomplete or not valid base64.") from None
+            require(supported_pdf(pdf), "Choose a complete supported PDF file; the uploaded file is invalid or truncated.")
+        with self.db(write=True) as db:
+            def operation():
+                parent = self.record(db, ident, "proposal")
+                candidate = parent["candidate"]
+                require(body.get("expectedCodeSha256", candidate["codeSha256"]) == candidate["codeSha256"], "The upload belongs to different LilyPond bytes.", 409)
+                provenance = {"mode": mode, "author": user, "compilationVerified": False}
+                if mode == "canonical":
+                    current = self.current(db, parent["workId"])
+                    require(current["files"]["ly"]["sha256"] == candidate["codeSha256"] and current["files"]["source"]["sha256"] == candidate["sourceSha256"], "The canonical source and LilyPond must exactly match this candidate before retaining a rebuild.", 409)
+                    revision = self.canonical_commit(parent["workId"], current, candidate)
+                    require(current["files"]["rendered"]["available"], "Build the canonical PDF before retaining it for review.", 409)
+                    data = db.execute("SELECT data FROM blobs WHERE sha=?", (current["files"]["rendered"]["sha256"],)).fetchone()[0]
+                    filename = current["files"]["rendered"]["name"]
+                    provenance.update({"producer": "Project operator canonical build", "compiler": None, "repositoryRevision": revision, "originalFilename": filename})
+                else:
+                    data, filename = pdf, name
+                    provenance.update({"producer": producer, "compiler": compiler, "originalFilename": filename})
+                require(supported_pdf(data), "The operator's build did not contain a complete supported PDF.", 409)
+                render_sha = digest(data)
+                root_id = parent.get("rootProposalId", parent["id"])
+                family = [p for p in self.records(db, parent["workId"], "proposal") if p.get("rootProposalId", p["id"]) == root_id]
+                # A retry with a new request ID still returns the first receipt.
+                # Search the entire family: alternating PDFs or choosing another
+                # parent must not create a fresh voting surface for old bytes.
+                for prior in family:
+                    if (prior["candidate"]["sourceSha256"] == candidate["sourceSha256"] and prior["candidate"]["codeSha256"] == candidate["codeSha256"]
+                            and prior["candidate"]["renderSha256"] == render_sha
+                            and (mode == "uploaded" or prior["candidate"].get("canonicalRepositoryRevision") == provenance["repositoryRevision"])):
+                        return prior
+                require(render_sha != candidate.get("renderSha256") or (mode == "canonical" and candidate.get("canonicalRepositoryRevision") != provenance["repositoryRevision"]), "This exact PDF is already retained by the selected proposal. Review that immutable revision.", 409, proposalId=ident)
+                original_payloads = read_zip(db.execute("SELECT data FROM blobs WHERE sha=?", (parent["packageSha256"],)).fetchone()[0])
+                response = json.loads(canonical(parent["response"]))
+                files = {}
+                if response["code"]["status"] == "changed":
+                    path = response["code"]["path"]
+                    files[path] = original_payloads[path]
+                    require(digest(files[path]) == candidate["codeSha256"], "The retained candidate code is inconsistent.", 409)
+                # A selected filename is a display label, never a ZIP path.
+                # Keep the portable ASCII archive contract for names with spaces
+                # or accents that are ordinary on contributors' computers.
+                render_path = "rendering/updated.pdf"
+                files[render_path] = data
+                response["rendering"] = {"status": "supplied", "path": render_path, "producer": provenance["producer"], "compiler": provenance["compiler"]}
+                response["files"] = {p: {"sha256": digest(b), "size": len(b)} for p, b in files.items()}
+                files["response.json"] = (json.dumps(response, indent=2, ensure_ascii=False)+"\n").encode()
+                output = io.BytesIO()
+                with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_STORED) as archive:
+                    for path, data_bytes in files.items():
+                        archive.writestr(path, data_bytes)
+                child_id = str(uuid.uuid4())
+                next_candidate = {**candidate, "renderSha256": self.put_blob(db, data, "application/pdf"), "renderingStatus": "supplied", "snapshotId": digest(f"source:{candidate['sourceSha256']}\nrendered:{render_sha}\nly:{candidate['codeSha256']}".encode())}
+                next_candidate.pop("canonicalRepositoryRevision", None)
+                if mode == "canonical":
+                    next_candidate["canonicalRepositoryRevision"] = provenance["repositoryRevision"]
+                rendering_authors = {user["id"]: user}
+                for prior in family:
+                    if prior["candidate"]["renderSha256"] == render_sha:
+                        for author in prior.get("renderingContributors", [prior.get("renderingProvenance", {}).get("author", prior["author"])]):
+                            rendering_authors[author["id"]] = author
+                value = {"id": child_id, "kind": "proposal", "workId": parent["workId"], "taskId": parent["taskId"], "createdAt": now(), "author": user,
+                         "responseAuthor": parent.get("responseAuthor", parent["author"]), "codeAuthor": parent.get("codeAuthor", parent["author"]),
+                         "renderingContributors": list(rendering_authors.values()),
+                         "parentProposalId": ident, "rootProposalId": root_id, "renderingRevision": max(p.get("renderingRevision", 1) for p in family)+1,
+                         "renderingProvenance": provenance, "response": response, "candidate": next_candidate, "status": "awaiting_review",
+                         "packageSha256": self.put_blob(db, output.getvalue(), "application/zip"), "packageUrl": f"/api/proposals/{child_id}/package"}
+                value["candidateCurrent"] = self.candidate_revision(db, value)
+                self.insert(db, "proposal", parent["workId"], value)
+                return value
+            return self.idempotent(db, user, body.get("requestId"), body, operation, f"renderings:{ident}")
 
     def submit_proposal(self, body, user):
         raw = zip_bytes(body.get("package"))
@@ -567,7 +737,7 @@ class Store:
                     require("path" in code and code["path"] is None, "Unchanged code must explicitly declare path: null.")
                 if rendering["status"] == "supplied":
                     path = rendering.get("path")
-                    require(safe_path(path) and path.endswith(".pdf") and path in payloads and payloads[path].startswith(b"%PDF-"), "Missing returned PDF.")
+                    require(safe_path(path) and path.endswith(".pdf") and path in payloads and supported_pdf(payloads[path]), "Missing, invalid or truncated returned PDF.")
                     text(rendering.get("producer"), "rendering producer", 500)
                     if rendering.get("compiler") is not None:
                         text(rendering["compiler"], "compiler declaration", 500, True)
@@ -593,22 +763,36 @@ class Store:
                         return prior
                 ident = str(uuid.uuid4())
                 candidate = {"sourceSha256": baseline["sourceSha256"], "codeSha256": code_sha, "renderSha256": render_sha, "snapshotId": digest(f"source:{baseline['sourceSha256']}\nrendered:{render_sha}\nly:{code_sha}".encode()) if render_sha else None, "renderingStatus": rendering["status"], "relationship": "supplier-declared; not established by compilation", "compilationVerified": False}
-                value = {"id": ident, "kind": "proposal", "workId": task["workId"], "taskId": task["id"], "createdAt": now(), "author": user, "response": response, "candidate": candidate, "status": "awaiting_review", "packageSha256": self.put_blob(db, raw, "application/zip"), "packageUrl": f"/api/proposals/{ident}/package"}
+                value = {"id": ident, "kind": "proposal", "workId": task["workId"], "taskId": task["id"], "createdAt": now(), "author": user, "responseAuthor": user, "codeAuthor": user,
+                         "parentProposalId": None, "rootProposalId": ident, "renderingRevision": 1,
+                         "renderingContributors": [user] if render_sha else [],
+                         "renderingProvenance": {"mode": "response", "author": user, "producer": rendering.get("producer"), "compiler": rendering.get("compiler"), "compilationVerified": False},
+                         "response": response, "candidate": candidate, "status": "awaiting_review", "packageSha256": self.put_blob(db, raw, "application/zip"), "packageUrl": f"/api/proposals/{ident}/package"}
+                value["candidateCurrent"] = self.candidate_revision(db, value)
                 self.insert(db, "proposal", task["workId"], value)
                 return value
             return self.idempotent(db, user, body.get("requestId"), body, operation, "proposals")
 
     def proposal_view(self, db, proposal, current=None):
-        task = self.record(db, proposal["taskId"], "task")
+        task = self.task_delivery(db, self.record(db, proposal["taskId"], "task"))
         events = self.records(db, proposal["workId"], "decision")
         events = [e for e in events if e["proposalId"] == proposal["id"]]
+        applications = [a for a in self.records(db, proposal["workId"], "application") if a["proposalId"] == proposal["id"]]
         findings = []
         for finding in task["task"]["findings"]:
             history = [e for e in events if e["findingId"] == finding["id"]]
-            findings.append({**finding, "decisionVersion": len(history), "decisions": history, "decision": history[-1] if history else None})
+            applied = [a for a in applications if finding["id"] in a["findingIds"]]
+            findings.append({**finding, "decisionVersion": len(history), "decisions": history, "decision": history[-1] if history else None, "applications": applied, "applied": bool(applied)})
         current = current or self.current(db, proposal["workId"])
-        applications = [a for a in self.records(db, proposal["workId"], "application") if a["proposalId"] == proposal["id"]]
-        return {**proposal, "findings": findings, "stale": current["snapshotId"] != task["baseline"]["snapshotId"], "applied": applications, "task": task["task"], "current": current}
+        root_id = proposal.get("rootProposalId", proposal["id"])
+        family = [p for p in self.records(db, proposal["workId"], "proposal") if p.get("rootProposalId", p["id"]) == root_id]
+        revisions = [{"id": p["id"], "parentProposalId": p.get("parentProposalId"), "renderingRevision": p.get("renderingRevision", 1), "createdAt": p["createdAt"], "candidate": p["candidate"], "renderingProvenance": p.get("renderingProvenance")} for p in family]
+        revisions.sort(key=lambda r: r["renderingRevision"])
+        applied_ids = [f["id"] for f in findings if f["applied"]]
+        return {**proposal, "parentProposalId": proposal.get("parentProposalId"), "rootProposalId": root_id, "renderingRevision": proposal.get("renderingRevision", 1),
+                "candidateCurrent": self.candidate_revision(db, proposal), "revisions": revisions, "latestRenderingId": revisions[-1]["id"],
+                "findings": findings, "stale": current["snapshotId"] != task["baseline"]["snapshotId"], "applied": applications,
+                "appliedFindingIds": applied_ids, "appliedCount": len(applied_ids), "findingCount": len(findings), "task": task["task"], "current": current}
 
     def decide(self, ident, body, user):
         require(body.get("state") in ("looks_correct", "needs_correction", "needs_clarification"), "Choose a supported decision.")
@@ -617,7 +801,9 @@ class Store:
         with self.db(write=True) as db:
             def operation():
                 proposal = self.record(db, ident, "proposal")
-                require(proposal["author"]["id"] != user["id"], "Ask another contributor to review the response you returned.", 403)
+                contributors = {proposal["author"]["id"], proposal.get("codeAuthor", proposal["author"])["id"], proposal.get("responseAuthor", proposal["author"])["id"]}
+                contributors.update(author["id"] for author in proposal.get("renderingContributors", []))
+                require(user["id"] not in contributors, "Ask another contributor to review these code and rendering bytes; their contributors cannot review their own candidate.", 403)
                 view = self.proposal_view(db, proposal)
                 finding = next((f for f in view["findings"] if f["id"] == body.get("findingId")), None)
                 require(finding, "This finding is not in the proposal.", 404)
@@ -642,17 +828,12 @@ class Store:
                 for ident in ids:
                     finding = next((f for f in view["findings"] if f["id"] == ident), None)
                     require(finding and finding["decision"] and finding["decision"]["state"] == "looks_correct", "Every applied finding needs an explicit review of this candidate.", 409)
+                    require(finding["decision"]["reviewed"] == proposal["candidate"], "The approval belongs to different candidate bytes.", 409)
                 current = view["current"]
-                require(current["snapshotId"] and current["snapshotId"] == proposal["candidate"]["snapshotId"], "The operator's current repository/build must contain the exact approved candidate code, source, and rendering before application can be recorded.", 409)
+                require(current["snapshotId"] and current["snapshotId"] == proposal["candidate"]["snapshotId"], "The operator's current repository/build must contain the exact approved candidate code, source, and rendering before application can be recorded. If only the rebuilt PDF differs, use Use project PDF and have another contributor review that new version.", 409)
                 require(body.get("repositoryRevision") == current["repositoryRevision"] and re.fullmatch(r"[a-f0-9]{40}", current["repositoryRevision"] or ""), "Application needs the actual current repository commit.", 409)
-                try:
-                    committed_code = subprocess.check_output(["git", "show", f"HEAD:{current['path']}"], cwd=self.repo, stderr=subprocess.DEVNULL, timeout=10)
-                    committed_metadata = json.loads(subprocess.check_output(["git", "show", f"HEAD:pieces/{slug}/metadata.json"], cwd=self.repo, stderr=subprocess.DEVNULL, timeout=10))
-                    branch = subprocess.check_output(["git", "branch", "--show-current"], cwd=self.repo, stderr=subprocess.DEVNULL, text=True, timeout=5).strip()
-                except (OSError, subprocess.SubprocessError):
-                    raise Problem("Cannot verify the canonical committed LilyPond revision.", 409) from None
-                canonical_branch = os.environ.get("OPUS_CANONICAL_BRANCH", "main")
-                require(branch == canonical_branch and digest(committed_code) == proposal["candidate"]["codeSha256"] and committed_metadata == self.metadata(slug) and committed_metadata.get("source_sha256") == proposal["candidate"]["sourceSha256"], "Application requires the exact committed candidate and source metadata on the operator's configured canonical branch; uncommitted files and other branches are not publication.", 409)
+                self.canonical_commit(slug, current, proposal["candidate"])
+                require(proposal["candidate"].get("canonicalRepositoryRevision", current["repositoryRevision"]) == current["repositoryRevision"], "The retained canonical rebuild belongs to another commit. Retain and review the current rebuild before recording application.", 409)
                 if proposal["response"]["code"]["status"] == "changed":
                     task = self.record(db, proposal["taskId"], "task")
                     require(current["repositoryRevision"] != task["repositoryRevision"], "A changed correction must first be committed in the canonical checkout.", 409)
@@ -663,9 +844,49 @@ class Store:
                 return event
             return self.idempotent(db, user, body.get("requestId"), body, operation, f"applications:{slug}")
 
+    def check_task_asset(self, sha):
+        # Historical uploaded ZIPs stay in private durable storage for audit,
+        # but must not bypass the safe /tasks/{id}/package delivery projection.
+        with self.db() as db:
+            rows = db.execute("SELECT body FROM records WHERE kind='task' AND body LIKE ?", ("%" + sha + "%",))
+            for row in rows:
+                record = json.loads(row[0])
+                policy = record.get("instructions", {})
+                if record.get("packageSha256") == sha and not (policy.get("schema") == "score-desk-trusted-instructions" and policy.get("version") == TASK_INSTRUCTION_POLICY):
+                    raise Problem("This original task upload is retained as historical evidence. Download its prepared task package instead.", 409, packageUrl=f"/api/tasks/{record['id']}/package")
+
+    def task_delivery(self, db, record):
+        """Serve safe operational instructions without replacing an old task.
+
+        Old records and uploaded blobs remain immutable audit evidence. A
+        separate delivery projection preserves their original task ID, every
+        response baseline field, exact annotation bytes, and requested IDs.
+        """
+        policy = record.get("instructions", {})
+        if policy.get("schema") == "score-desk-trusted-instructions" and policy.get("version") == TASK_INSTRUCTION_POLICY:
+            return record
+        db.execute("CREATE TABLE IF NOT EXISTS task_deliveries(task_id TEXT NOT NULL, version INTEGER NOT NULL, body TEXT NOT NULL, PRIMARY KEY(task_id,version))")
+        cached = db.execute("SELECT body FROM task_deliveries WHERE task_id=? AND version=?", (record["id"], TASK_INSTRUCTION_POLICY)).fetchone()
+        if cached:
+            return json.loads(cached[0])
+        row = db.execute("SELECT data FROM blobs WHERE sha=?", (record["packageSha256"],)).fetchone()
+        require(row, "The original task package is unavailable; its identity has not been replaced.", 409)
+        manifest, review, payloads = package(row[0])
+        snapshot = self.record(db, record["snapshotId"], "snapshot")
+        try:
+            raw, safe_task, instructions = build_delivery(record, snapshot, payloads, manifest, review)
+        except (ValueError, KeyError, TypeError, OSError) as error:
+            raise Problem("The original task cannot currently be prepared safely. Its ID and baseline are retained; ask a maintainer to repair its original context.", 409) from error
+        package(raw)
+        delivered = {**record, "task": safe_task, "instructions": instructions, "packageSha256": self.put_blob(db, raw, "application/zip"), "delivery": {"version": TASK_INSTRUCTION_POLICY, "originalPackageSha256": record["packageSha256"], "preservesOriginalBaseline": True}}
+        db.execute("INSERT INTO task_deliveries VALUES(?,?,?)", (record["id"], TASK_INSTRUCTION_POLICY, canonical(delivered)))
+        return delivered
+
     def get_record(self, kind, ident):
         with self.db(write=True) as db:
             record = self.record(db, ident, kind)
+            if kind == "task":
+                return self.task_delivery(db, record)
             return self.proposal_view(db, record) if kind == "proposal" else record
 
     def handoff(self, kind, ident):
@@ -951,6 +1172,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(200, {"signedOut": True})
             match = re.fullmatch(r"/api/assets/([a-f0-9]{64})", path)
             if match and self.command == "GET":
+                store.check_task_asset(match[1])
                 data, mime = store.blob(match[1])
                 return self.send(200, data, mime)
             if path == "/api/works" and self.command == "GET":
@@ -999,7 +1221,7 @@ class Handler(BaseHTTPRequestHandler):
                 body = self.read_body()
                 require(isinstance(body, dict), "Invalid submission.")
                 return self.send(200, store.submit_task(body, user) if path.endswith("tasks") else store.submit_proposal(body, user))
-            match = re.fullmatch(r"/api/(reports|tasks|proposals)/([A-Za-z0-9_-]+)(?:/(package|handoff|decisions))?", path)
+            match = re.fullmatch(r"/api/(reports|tasks|proposals)/([A-Za-z0-9_-]+)(?:/(package|handoff|decisions|renderings))?", path)
             if match:
                 plural, ident, action = match.groups()
                 kind = {"reports": "report", "tasks": "task", "proposals": "proposal"}[plural]
@@ -1013,9 +1235,11 @@ class Handler(BaseHTTPRequestHandler):
                         data, mime = store.blob(record["packageSha256"])
                         return self.send(200, data, mime, {"Content-Disposition": f'attachment; filename="opus-{kind}-{ident}.zip"'})
                     return self.send(200, record)
-                if self.command == "POST" and kind == "proposal" and action == "decisions":
+                if self.command == "POST" and kind == "proposal" and action in ("decisions", "renderings"):
                     user = self.app.user(self.headers, True)
-                    return self.send(200, store.decide(ident, self.read_body(), user))
+                    body = self.read_body()
+                    require(isinstance(body, dict), "Invalid proposal submission.")
+                    return self.send(200, store.decide(ident, body, user) if action == "decisions" else store.attach_rendering(ident, body, user))
             raise Problem("Shared endpoint not found.", 404)
         except Problem as error:
             # Drain a small rejected JSON body before close so Windows sockets

@@ -21,6 +21,7 @@ export async function runShared({browser,serve,evidence,root}){
   const lilypond=Buffer.from(await (await fixtureBlob('score.ly')).arrayBuffer());
   await writeFile(resolve(piece,'score.ly'),lilypond);await writeFile(renderPath,rendered);
   await writeFile(resolve(piece,'metadata.json'),json({slug,title:'SIMULATED shared acceptance work',composer:'Synthetic fixture',step:3,models:['simulated/test-only'],verified_by:null,source_sha256:sha(source),source_pdf:'https://example.invalid/SIMULATED-source.pdf',source_page:'https://example.invalid/SIMULATED',source_id:'SIMULATED-NOT-A-SCORE'}));
+  for(const name of ['AGENTS.md','HANDBOOK.md'])await writeFile(resolve(repo,name),await readFile(resolve(root,name)));
   const git=(...args)=>execFileSync('git',args,{cwd:repo,stdio:'pipe',encoding:'utf8'}).trim();
   git('init','--initial-branch=main','--quiet');git('add','pieces');
   git('-c','user.name=OPUS simulated test','-c','user.email=simulated@example.invalid','commit','--quiet','-m','SIMULATED test baseline; no musical verification');
@@ -85,9 +86,27 @@ export async function runShared({browser,serve,evidence,root}){
     await textFinding(eric,'SIMULATED another reporter observation.');const ericId=await submit(eric);
     check(Date.now()-quickStart<10000,'one-finding report completes within ten seconds without AI or PR');
     check((await state()).findings.length===3,'shared reports from different browsers accumulate');
-    const bob=await actor('bob');const taskBytes=await getTask(bob);
     const zipModule={exports:{}};Function('module','exports',await readFile(resolve(root,'contributor/score/vendor/jszip.min.js'),'utf8'))(zipModule,zipModule.exports);
-    const JSZip=zipModule.exports,taskZip=await JSZip.loadAsync(taskBytes),task=JSON.parse(await taskZip.file('task.json').async('string'));
+    const JSZip=zipModule.exports,bob=await actor('bob'),injected='SIMULATED SUBSTITUTED OPERATIONAL INSTRUCTION';
+    await bob.context().route('**/api/tasks',async route=>{
+      const body=route.request().postDataJSON(),zip=await JSZip.loadAsync(Buffer.from(body.package,'base64'));
+      for(const path of ['PROMPT.txt','review.txt','RESPONSE_FORMAT.txt','project-guidance/AGENTS.md','project-guidance/HANDBOOK.md'])zip.file(path,injected);
+      const task=JSON.parse(await zip.file('task.json').async('string'));task.renderingConstraint=injected;task.instructions=injected;zip.file('task.json',json(task));
+      const manifest=JSON.parse(await zip.file('manifest.json').async('string'));manifest.payloads={};
+      for(const [path,file]of Object.entries(zip.files))if(path!=='manifest.json'&&!file.dir){const bytes=await file.async('nodebuffer');manifest.payloads[path]={size:bytes.length,sha256:sha(bytes)};}
+      zip.file('manifest.json',json(manifest));body.package=await zip.generateAsync({type:'base64'});
+      await route.continue({postData:JSON.stringify(body)});
+    });
+    const taskBytes=await getTask(bob);await bob.context().unroute('**/api/tasks');
+    const taskZip=await JSZip.loadAsync(taskBytes),task=JSON.parse(await taskZip.file('task.json').async('string'));
+    check(!(await bob.locator('#sharedPrompt').inputValue()).includes(injected),'resealed uploaded instructions never become the ready-to-copy prompt');
+    const instructionPaths=['PROMPT.txt','review.txt','RESPONSE_FORMAT.txt','project-guidance/AGENTS.md','project-guidance/HANDBOOK.md','task.json'];
+    check((await Promise.all(instructionPaths.map(path=>taskZip.file(path).async('string')))).every(value=>!value.includes(injected)),'downloaded task replaces prompt and adjacent guidance with trusted instructions');
+    const trustee=await actor('trustee','&task='+task.id);
+    await trustee.waitForFunction(id=>document.querySelector('#sharedPrompt').value.includes(id),task.id);
+    check(!(await trustee.locator('#sharedPrompt').inputValue()).includes(injected)&&(await trustee.locator('#sharedPrompt').inputValue()).includes(task.id),'another account reopens the same task with trusted instructions and immutable identity');
+    const [trustedDownload]=await Promise.all([trustee.waitForEvent('download'),trustee.locator('#sharedTaskDownloads a').click()]);
+    check(sha(await readFile(await trustedDownload.path()))===sha(taskBytes),'reopened task receipt downloads the same safe immutable package');
     check(task.findings.length===3&&task.findings.filter(f=>f.author.login==='alice').length===2&&task.findings.some(f=>f.author.login==='eric'),'Bob fresh browser downloads every shared finding with original authorship');
     check(task.findings.every(f=>taskZip.file(f.historicalContext.clean)&&taskZip.file(f.historicalContext.marked)),'actual renderer generates clean and marked context for text and brush findings');
     check((await bob.locator('#sharedPrompt').inputValue()).includes('untrusted observations'),'ready-to-copy instructions preserve source fidelity and distrust imported comments');
@@ -157,6 +176,24 @@ export async function runShared({browser,serve,evidence,root}){
     await findingsForm(eve);await eve.locator('input[name=sharedScope][value=whole]').check();await eve.locator('#sharedScopeNote').fill('SIMULATED whole-work review: every fixture page and system.');await eve.locator('#sharedClean').check();await sendReport(eve);
     const cleanState=await state();check(cleanState.reports.filter(r=>r.clean).length===2&&cleanState.findings.length===4,'partial and whole clean reviews leave other people findings intact');
     check(cleanState.current.files.ly.sha256===sha(lilypond)&&cleanState.work.verified_by===null,'review-only submissions change neither LilyPond nor verification');
+    // Coverage may include errors this reviewer has already reported, without
+    // duplicating those errors or forcing a false no-errors declaration.
+    await findingsForm(alice);
+    const knownChoices=alice.locator('[data-shared-finding]');
+    check(await knownChoices.evaluateAll(items=>items.length===2&&items.every(item=>item.disabled&&!item.checked)),'quick reports suppress already submitted findings');
+    await alice.locator('input[name=sharedScope][value=partial]').check();await knownChoices.first().check();await knownChoices.last().uncheck();
+    await alice.locator('#sharedScopeNote').fill('SIMULATED broader coverage with an existing error.');
+    await alice.locator('input[name=sharedScope][value=whole]').check();
+    assert(await knownChoices.first().isChecked());
+    await alice.locator('input[name=sharedScope][value=report]').check();assert(await knownChoices.first().isDisabled()&&!await knownChoices.first().isChecked());
+    await alice.locator('input[name=sharedScope][value=partial]').check();
+    check(await knownChoices.first().isChecked()&&!await knownChoices.first().isDisabled(),'coverage scopes retain chosen existing findings across scope changes');
+    await alice.reload();await alice.locator('#sharedDialog').waitFor({state:'visible'});
+    await alice.locator('#sharedDevLogin').fill('alice');await alice.locator('#sharedDevForm button').click();await alice.waitForFunction(()=>document.querySelector('#sharedIdentity').textContent.includes('@alice'));
+    await openScore(alice);await findingsForm(alice);await alice.waitForFunction(()=>document.querySelector('#sharedScopeNote').value==='SIMULATED broader coverage with an existing error.');
+    check(await alice.locator('input[name=sharedScope][value=partial]').isChecked()&&await knownChoices.first().isChecked()&&!await knownChoices.first().isDisabled(),'coverage draft restores an existing finding after reload');
+    const coverageId=await sendReport(alice),coverage=await api('/api/reports/'+coverageId);
+    check(!coverage.clean&&coverage.scope.kind==='partial'&&coverage.referencedFindingIds.length===1&&coverage.findings.length===0&&(await state()).findings.length===4,'broader coverage references an existing error without creating a duplicate');
     // Normal authenticated users cannot mutate reports or claim application/verification.
     const outsider=await api('/auth/dev',{method:'POST',body:{login:'outsider'}});
     await api('/api/reports/'+aliceId,{method:'PATCH',body:{comment:'overwrite'},token:outsider.token,expected:405});
@@ -193,7 +230,7 @@ export async function runShared({browser,serve,evidence,root}){
     await hank.locator('#sharedSendReport').click();await hank.waitForFunction(()=>document.querySelector('#sharedStatus').textContent.includes('could not be reached'));
     check((await state()).findings.length===5&&await hank.locator('#sharedPending button').count()===1,'lost acknowledgement leaves pending retry although server committed once');
     await hank.context().unroute('**/api/works/'+slug+'/reports');await hank.locator('#sharedPending button').click();
-    await hank.waitForFunction(()=>document.querySelector('#sharedPending').textContent==='');
+    await hank.waitForFunction(()=>document.querySelector('#sharedPending').textContent===''&&document.querySelector('#sharedReceipt').textContent.includes('Submitted to the project'));
     check((await state()).findings.length===5&&(await hank.locator('#sharedReceipt').innerText()).includes('Submitted to the project'),'safe retry gets durable receipt without duplicating finding');
     await grace.screenshot({path:resolve(evidence,'shared-receipt.png'),fullPage:true});
     await david.screenshot({path:resolve(evidence,'shared-proposal.png'),fullPage:true});

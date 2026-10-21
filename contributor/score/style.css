@@ -235,6 +235,14 @@ button.icon-close svg{display:block;width:16px;height:16px;fill:none;stroke:curr
 .shared-decision-buttons{display:flex;gap:6px;flex-wrap:wrap}
 .shared-decision-buttons button{font-size:12px}
 .shared-proposal-state{font-size:12px;color:#536b60}
+.shared-finding-state{font-size:12px;font-weight:600;color:var(--ink);padding:7px;background:#edf5ef;border-radius:4px}
+#sharedProposalFinding{width:100%;min-width:0;font-size:12px}
+.shared-pdf-upload{padding:10px;border:1px solid var(--line);border-radius:6px;margin:12px 0}
+.shared-pdf-upload h4{margin:0;font-size:14px}
+.shared-pdf-upload p{font-size:12px}
+.shared-pdf-upload input{display:block;max-width:100%;width:100%;font:inherit;padding:7px;border:1px solid var(--line);border-radius:4px;margin-top:5px}
+.shared-pdf-upload input[type=file]{padding:0;border:0;font-size:12px}
+#sharedProposalVersions button{display:block;margin:7px 0;font-size:12px}
 #sharedHandoffText{font-size:12px;line-height:1.5}
 .shared-local-tools{display:none}
 .shared-work-selected .primary-actions #openPackage,.shared-work-selected .primary-actions #exportTask,.shared-work-selected .primary-actions #finishReview{display:none}

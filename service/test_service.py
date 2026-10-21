@@ -144,7 +144,7 @@ class SharedServiceTests(unittest.TestCase):
             files[path] = self.store.blob(snapshot["current"]["files"][role]["sha256"])[0]
         for index, finding in enumerate(snapshot["findings"], 1):
             current = finding["reviewed"]["snapshotId"] == review["snapshotId"]
-            annotation = {**finding["annotation"], "id": finding["id"], "number": index, "state": "needs_source_clarification" if finding["kind"] == "clarification" else "open"}
+            annotation = {**finding["annotation"], "id": finding["id"], "number": index, "state": "needs_source_clarification" if finding["kind"] != "transcription" else "open"}
             if current:
                 review["findings"].append(annotation)
             context = {"page": finding["annotation"]["page"], "renderSha256": finding["reviewed"]["renderSha256"], "marked": f"context/{finding['id']}-marked.png", "clean": f"context/{finding['id']}-clean.png"}
@@ -373,6 +373,224 @@ class SharedServiceTests(unittest.TestCase):
         finding = self.report()["findings"][0]["id"]
         proposal = self.proposal(self.task(), changed=True, pending=True)
         self.assertEqual(self.request("POST", f"/api/proposals/{proposal['id']}/decisions", self.decision_body(finding), "david")[0], 409)
+
+    def test_another_person_attaches_pdf_with_durable_idempotent_child_receipt(self):
+        finding = self.report()["findings"][0]["id"]
+        parent = self.proposal(self.task(), changed=True, pending=True)
+        parent_package = self.request("GET", parent["packageUrl"])[1]
+        self.assertIsNone(parent["candidateCurrent"])
+        self.assertEqual(self.request("POST", f"/api/proposals/{parent['id']}/decisions", self.decision_body(finding, state="needs_correction"), "eve")[0], 200)
+        path = f"/api/proposals/{parent['id']}/renderings"
+        pdf = simulated_pdf("SIMULATED separately supplied PDF", 600)
+        body = {"requestId": str(uuid.uuid4()), "mode": "uploaded", "pdf": encoded(pdf), "name": "Separate révision.PDF", "producer": "Carol supplied this SIMULATED fixture", "compiler": "No compilation: text fixture only"}
+        self.assertEqual(self.request("POST", path, body)[0], 401)
+        self.assertEqual(self.request("POST", path, {**body, "pdf": "broken upload"}, "carol")[0], 400)
+        self.assertEqual(self.request("POST", path, {**body, "pdf": encoded(b"%PDF-1.7\ntruncated")}, "carol")[0], 400)
+        self.assertEqual(self.request("POST", path, {**body, "expectedCodeSha256": "0"*64}, "carol")[0], 409)
+        self.assertEqual(self.request("POST", path, {**body, "author": {"id": "dev:bob"}}, "carol")[0], 403)
+        results = list(ThreadPoolExecutor(2).map(lambda _: self.request("POST", path, body, "carol"), range(2)))
+        self.assertEqual([status for status, _ in results], [200, 200], results)
+        child = results[0][1]
+        self.assertEqual(results[1][1]["id"], child["id"])
+        self.assertNotEqual(child["id"], parent["id"])
+        self.assertEqual(child["parentProposalId"], parent["id"])
+        self.assertEqual(child["rootProposalId"], parent["id"])
+        self.assertEqual(child["renderingRevision"], 2)
+        self.assertEqual(child["author"]["id"], "dev:carol")
+        self.assertEqual(child["codeAuthor"]["id"], "dev:bob")
+        self.assertEqual(child["renderingProvenance"]["originalFilename"], body["name"])
+        self.assertEqual(child["candidate"]["codeSha256"], parent["candidate"]["codeSha256"])
+        self.assertEqual(child["candidate"]["renderSha256"], digest(pdf))
+        self.assertFalse(child["candidate"]["compilationVerified"])
+        self.assertEqual(self.request("GET", parent["packageUrl"])[1], parent_package)
+        detail = self.request("GET", f"/api/proposals/{child['id']}")[1]
+        self.assertEqual(detail["findings"][0]["decisionVersion"], 0)
+        self.assertEqual(detail["candidateCurrent"]["origin"]["proposalId"], child["id"])
+        self.assertEqual(self.request("GET", detail["candidateCurrent"]["files"]["rendered"]["url"])[1], pdf)
+        for person in ("bob", "carol"):
+            self.assertEqual(self.request("POST", f"/api/proposals/{child['id']}/decisions", self.decision_body(finding), person)[0], 403)
+        self.assertEqual(self.request("POST", f"/api/proposals/{child['id']}/decisions", self.decision_body(finding), "eve")[0], 200)
+        # A lost acknowledgement, new browser session and new retry ID still
+        # find the retained revision rather than creating fresh voting records.
+        self.tokens["carol"] = self.request("POST", "/auth/dev", {"login": "carol"})[1]["token"]
+        retry = self.request("POST", path, {**body, "requestId": str(uuid.uuid4())}, "carol")[1]
+        self.assertEqual(retry["id"], child["id"])
+        reopened = Store(self.root / "private-data", self.repo, self.site)
+        self.assertEqual(reopened.get_record("proposal", child["id"])["findings"][0]["decisionVersion"], 1)
+        returned = read_zip(reopened.blob(child["packageSha256"])[0])
+        response = strict_json(returned["response.json"])
+        self.assertEqual(response["baseline"], parent["response"]["baseline"])
+        self.assertEqual(response["results"], parent["response"]["results"])
+        self.assertEqual(digest(returned[response["code"]["path"]]), parent["candidate"]["codeSha256"])
+        self.assertEqual(returned[response["rendering"]["path"]], pdf)
+
+    def test_canonical_rebuild_requires_fresh_review_and_reports_partial_application(self):
+        report = self.report(count=2)
+        ids = [f["id"] for f in report["findings"]]
+        parent = self.proposal(self.task(), changed=True)
+        for ident in ids:
+            self.assertEqual(self.request("POST", f"/api/proposals/{parent['id']}/decisions", self.decision_body(ident), "carol")[0], 200)
+        (self.piece / "score.ly").write_bytes(self.store.blob(parent["candidate"]["codeSha256"])[0])
+        self.commit("SIMULATED merged exact candidate code")
+        rebuilt = simulated_pdf("SIMULATED canonical rebuild with distinct PDF bytes", 600)
+        self.render_path.write_bytes(rebuilt)
+        commit = self.git("rev-parse", "HEAD")
+        application = {"requestId": str(uuid.uuid4()), "proposalId": parent["id"], "findingIds": [ids[0]], "repositoryRevision": commit, "pullRequest": "https://github.com/example/project/pull/9"}
+        apply_path = f"/api/works/{self.slug}/applications"
+        self.assertEqual(self.request("POST", apply_path, application, "david")[0], 409)
+        retain_path = f"/api/proposals/{parent['id']}/renderings"
+        capture = {"requestId": str(uuid.uuid4()), "mode": "canonical"}
+        self.assertEqual(self.request("POST", retain_path, capture, "carol")[0], 403)
+        status, child = self.request("POST", retain_path, capture, "david")
+        self.assertEqual(status, 200, child)
+        self.assertEqual(child["renderingProvenance"]["repositoryRevision"], commit)
+        self.assertEqual(child["candidate"]["canonicalRepositoryRevision"], commit)
+        self.assertEqual(child["candidate"]["renderSha256"], digest(rebuilt))
+        self.assertIsNone(child["candidateCurrent"]["repositoryRevision"])
+        self.assertEqual(child["candidateCurrent"]["origin"]["kind"], "proposal")
+        application.update(requestId=str(uuid.uuid4()), proposalId=child["id"])
+        self.assertEqual(self.request("POST", apply_path, application, "david")[0], 409)
+        self.assertEqual(self.request("POST", f"/api/proposals/{child['id']}/decisions", self.decision_body(ids[0]), "carol")[0], 200)
+        status, event = self.request("POST", apply_path, application, "david")
+        self.assertEqual(status, 200, event)
+        detail = self.request("GET", f"/api/proposals/{child['id']}")[1]
+        self.assertEqual((detail["appliedCount"], detail["findingCount"]), (1, 2))
+        self.assertEqual(detail["appliedFindingIds"], [ids[0]])
+        by_id = {f["id"]: f for f in detail["findings"]}
+        self.assertTrue(by_id[ids[0]]["applied"])
+        self.assertEqual(by_id[ids[0]]["applications"][0]["id"], event["id"])
+        self.assertFalse(by_id[ids[1]]["applied"])
+        self.assertIsNone(by_id[ids[1]]["decision"])
+        self.assertEqual(self.request("GET", f"/api/proposals/{parent['id']}")[1]["appliedCount"], 0)
+        self.assertEqual([f["id"] for f in self.store.snapshot(self.slug)["findings"]], [ids[1]])
+        self.assertIsNone(json.loads((self.piece / "metadata.json").read_text())["verified_by"])
+        # A later rebuild never borrows this child's approval.
+        self.render_path.write_bytes(simulated_pdf("SIMULATED later canonical PDF rebuild", 600))
+        application.update(requestId=str(uuid.uuid4()), findingIds=[ids[1]])
+        self.assertEqual(self.request("POST", f"/api/proposals/{child['id']}/decisions", self.decision_body(ids[1]), "carol")[0], 200)
+        self.assertEqual(self.request("POST", apply_path, application, "david")[0], 409)
+        status, later = self.request("POST", f"/api/proposals/{child['id']}/renderings", {"requestId": str(uuid.uuid4()), "mode": "canonical"}, "david")
+        self.assertEqual(status, 200, later)
+        self.assertEqual(later["renderingRevision"], 3)
+        self.assertEqual(self.request("GET", f"/api/proposals/{later['id']}")[1]["findings"][0]["decisionVersion"], 0)
+        self.assertEqual(len(self.store.snapshot(self.slug)["findings"]), 1)
+
+    def test_candidate_reports_keep_original_context_in_later_canonical_tasks(self):
+        original = self.report()
+        proposal = self.proposal(self.task(), changed=True)
+        candidate = proposal["candidateCurrent"]
+        path = f"/api/works/{self.slug}/reports"
+        body = self.report_body(current=candidate, width=600, prefix="candidate-text")
+        self.assertEqual(self.request("POST", path, body, "carol")[0], 409)
+        body["proposalId"] = proposal["id"]
+        status, report = self.request("POST", path, body, "carol")
+        self.assertEqual(status, 200, report)
+        self.assertEqual(report["reviewed"]["origin"], "candidate")
+        self.assertEqual(report["reviewed"]["proposalId"], proposal["id"])
+        self.assertIsNone(report["reviewed"]["repositoryRevision"])
+        self.assertEqual(report["findings"][0]["reviewed"]["proposalId"], proposal["id"])
+        clean_body = self.report_body(0, current=candidate, width=600, clean=True, kind="whole")
+        clean_body["proposalId"] = proposal["id"]
+        status, clean = self.request("POST", path, clean_body, "eve")
+        self.assertEqual(status, 200, clean)
+        self.assertTrue(clean["clean"])
+        self.assertEqual(clean["scope"]["kind"], "whole")
+        self.assertEqual(clean["reviewed"]["origin"], "candidate")
+        self.assertEqual(clean["verification"], "Not verified")
+        snapshot = self.store.snapshot(self.slug)
+        self.assertEqual(snapshot["current"]["snapshotId"], self.current["snapshotId"])
+        self.assertEqual({f["id"] for f in snapshot["findings"]}, {original["findings"][0]["id"], report["findings"][0]["id"]})
+        task = self.task(snapshot)
+        finding = next(f for f in task["task"]["findings"] if f["id"] == report["findings"][0]["id"])
+        self.assertIsNone(finding["page"])
+        self.assertIsNone(finding["currentAnchor"])
+        self.assertEqual(finding["origin"]["reviewed"]["origin"], "candidate")
+        self.assertEqual(finding["origin"]["reviewed"]["proposalId"], proposal["id"])
+        self.assertEqual(finding["historicalContext"]["originalFiles"]["rendered"]["sha256"], proposal["candidate"]["renderSha256"])
+        recovery = package(self.request("GET", f"/api/reports/{report['id']}/package")[1])[1]
+        self.assertEqual(recovery["pages"][0]["view"][2], 600)
+        self.assertEqual(recovery["files"]["rendered"]["sha256"], proposal["candidate"]["renderSha256"])
+        self.assertEqual((self.piece / "score.ly").read_bytes(), self.code)
+
+    def test_existing_proposal_gains_candidate_review_without_rewriting_evidence(self):
+        self.report()
+        proposal = self.proposal(self.task(), changed=True)
+        # Simulate a pre-upgrade persisted proposal in this disposable database.
+        original = {k: v for k, v in proposal.items() if k not in ("candidateCurrent", "parentProposalId", "rootProposalId", "renderingRevision", "renderingProvenance", "codeAuthor", "responseAuthor")}
+        saved_body = json.dumps(original)
+        with self.store.db(write=True) as db:
+            db.execute("UPDATE records SET body=? WHERE id=?", (saved_body, proposal["id"]))
+        saved_package = self.store.blob(proposal["packageSha256"])[0]
+        status, reopened = self.request("GET", f"/api/proposals/{proposal['id']}")
+        self.assertEqual(status, 200, reopened)
+        self.assertEqual(reopened["candidateCurrent"]["snapshotId"], proposal["candidate"]["snapshotId"])
+        body = self.report_body(current=reopened["candidateCurrent"], width=600, prefix="legacy-candidate")
+        body["proposalId"] = proposal["id"]
+        status, report = self.request("POST", f"/api/works/{self.slug}/reports", body, "eve")
+        self.assertEqual(status, 200, report)
+        self.assertEqual(report["reviewed"]["origin"], "candidate")
+        with self.store.db() as db:
+            self.assertEqual(db.execute("SELECT body FROM records WHERE id=?", (proposal["id"],)).fetchone()[0], saved_body)
+        self.assertEqual(self.request("GET", proposal["packageUrl"])[1], saved_package)
+
+    def test_canonical_capture_rejects_wrong_dirty_or_uncommitted_candidate(self):
+        self.report()
+        proposal = self.proposal(self.task(), changed=True)
+        path = f"/api/proposals/{proposal['id']}/renderings"
+        body = {"requestId": str(uuid.uuid4()), "mode": "canonical"}
+        self.assertEqual(self.request("POST", path, body, "david")[0], 409)
+        (self.piece / "score.ly").write_bytes(self.store.blob(proposal["candidate"]["codeSha256"])[0])
+        self.assertEqual(self.request("POST", path, body, "david")[0], 409)
+        self.commit("SIMULATED candidate commit")
+        self.git("checkout", "-b", "unmerged-fixture")
+        self.assertEqual(self.request("POST", path, body, "david")[0], 409)
+        self.git("checkout", "main")
+        (self.piece / "metadata.json").write_text(json.dumps({**self.metadata, "title": "Dirty fixture"}))
+        self.assertEqual(self.request("POST", path, body, "david")[0], 409)
+
+    def test_reused_rendering_cannot_erase_its_supplier_or_reset_its_decisions(self):
+        finding = self.report()["findings"][0]["id"]
+        parent = self.proposal(self.task(), changed=True, pending=True)
+        first_pdf = simulated_pdf("SIMULATED Carol PDF", 600)
+        def upload(proposal, user, pdf):
+            body = {"requestId": str(uuid.uuid4()), "mode": "uploaded", "pdf": encoded(pdf), "name": "score.pdf", "producer": "SIMULATED "+user}
+            status, record = self.request("POST", f"/api/proposals/{proposal['id']}/renderings", body, user)
+            self.assertEqual(status, 200, record)
+            return record
+        first = upload(parent, "carol", first_pdf)
+        self.assertEqual(self.request("POST", f"/api/proposals/{first['id']}/decisions", self.decision_body(finding, state="needs_correction"), "david")[0], 200)
+        second = upload(first, "eve", simulated_pdf("SIMULATED Eve different PDF", 600))
+        self.assertEqual(upload(second, "eve", first_pdf)["id"], first["id"])
+        self.assertEqual(upload(parent, "eve", first_pdf)["id"], first["id"])
+        self.assertEqual(self.store.get_record("proposal", first["id"])["findings"][0]["decisionVersion"], 1)
+        self.assertEqual(self.request("POST", f"/api/proposals/{first['id']}/decisions", self.decision_body(finding, 1), "carol")[0], 403)
+        # Capturing the same PDF on a canonical commit requires a fresh review,
+        # but still remembers who supplied those exact bytes earlier.
+        (self.piece / "score.ly").write_bytes(self.store.blob(parent["candidate"]["codeSha256"])[0])
+        self.commit("SIMULATED committed candidate")
+        self.render_path.write_bytes(first_pdf)
+        status, canonical = self.request("POST", f"/api/proposals/{second['id']}/renderings", {"requestId": str(uuid.uuid4()), "mode": "canonical"}, "david")
+        self.assertEqual(status, 200, canonical)
+        self.assertNotEqual(canonical["id"], first["id"])
+        self.assertEqual({u["id"] for u in canonical["renderingContributors"]}, {"dev:carol", "dev:david"})
+        self.assertEqual(self.request("POST", f"/api/proposals/{canonical['id']}/decisions", self.decision_body(finding), "carol")[0], 403)
+        self.assertEqual(self.request("POST", f"/api/proposals/{canonical['id']}/decisions", self.decision_body(finding), "eve")[0], 200)
+
+    def test_canonical_rendering_approval_is_bound_to_its_retained_commit(self):
+        ident = self.report()["findings"][0]["id"]
+        parent = self.proposal(self.task(), changed=True)
+        (self.piece / "score.ly").write_bytes(self.store.blob(parent["candidate"]["codeSha256"])[0])
+        self.commit("SIMULATED committed code")
+        self.render_path.write_bytes(simulated_pdf("SIMULATED canonical", 600))
+        child = self.request("POST", f"/api/proposals/{parent['id']}/renderings", {"requestId": str(uuid.uuid4()), "mode": "canonical"}, "david")[1]
+        self.assertEqual(self.request("POST", f"/api/proposals/{child['id']}/decisions", self.decision_body(ident), "carol")[0], 200)
+        self.git("commit", "--allow-empty", "-m", "SIMULATED later publication commit")
+        body = {"requestId": str(uuid.uuid4()), "proposalId": child["id"], "findingIds": [ident], "repositoryRevision": self.git("rev-parse", "HEAD"), "pullRequest": "https://github.com/example/project/pull/10"}
+        self.assertEqual(self.request("POST", f"/api/works/{self.slug}/applications", body, "david")[0], 409)
+        newer = self.request("POST", f"/api/proposals/{child['id']}/renderings", {"requestId": str(uuid.uuid4()), "mode": "canonical"}, "david")[1]
+        self.assertNotEqual(newer["id"], child["id"])
+        self.assertEqual(newer["candidate"]["renderSha256"], child["candidate"]["renderSha256"])
+        self.assertEqual(self.store.get_record("proposal", newer["id"])["findings"][0]["decisionVersion"], 0)
 
     def test_dirty_candidate_and_other_branch_cannot_claim_application(self):
         finding = self.report()["findings"][0]["id"]

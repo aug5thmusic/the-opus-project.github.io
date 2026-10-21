@@ -36,6 +36,21 @@ def fail(message: str) -> None:
     raise ValueError(message)
 
 
+def compile_score(source: Path, pdf: Path, *, cwd: Path, lilypond: str | None = None) -> None:
+    """Compile the exact source bytes using the production rendering command."""
+    compiler = lilypond or shutil.which("lilypond")
+    if not compiler:
+        fail("lilypond is not installed")
+    result = subprocess.run(
+        [compiler, "-dno-point-and-click", "-o", str(pdf.with_suffix("")), str(source)],
+        cwd=cwd, capture_output=True, text=True, timeout=120, check=False,
+    )
+    if result.returncode:
+        fail(f"{source}: LilyPond failed\n{(result.stdout + result.stderr)[-4000:]}")
+    if not pdf.is_file() or pdf.stat().st_size == 0:
+        fail(f"{source}: LilyPond did not produce {pdf}")
+
+
 def contributor_assets(root: Path | None = None) -> dict[Path, Path]:
     """Validate the complete public runtime before copying any contributor files.
 
@@ -144,27 +159,8 @@ def main() -> int:
         deployed_source = output / source_relative
         deployed_source.parent.mkdir(mode=0o755, parents=True, exist_ok=True)
         shutil.copy2(source, deployed_source)
-        output_base = (output / Path(str(entry["pdf_url"]))).with_suffix("")
-        result = subprocess.run(
-            [
-                lilypond,
-                "-dno-point-and-click",
-                "-o",
-                str(output_base),
-                str(deployed_source),
-            ],
-            cwd=output,
-            capture_output=True,
-            text=True,
-            timeout=120,
-            check=False,
-        )
-        if result.returncode:
-            detail = (result.stdout + result.stderr)[-4000:]
-            fail(f"{source_relative}: LilyPond failed\n{detail}")
         pdf = output / Path(str(entry["pdf_url"]))
-        if not pdf.is_file() or pdf.stat().st_size == 0:
-            fail(f"{source_relative}: LilyPond did not produce {pdf}")
+        compile_score(deployed_source, pdf, cwd=output, lilypond=lilypond)
 
     print(f"built {len(catalog['scores'])} catalog works and {len(reviews['scores'])} review drafts in {output}")
     return 0

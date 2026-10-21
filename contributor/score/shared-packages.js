@@ -39,7 +39,7 @@ export async function loadSharedWork(client,workOrCurrent,inspectPdf){
 }
 
 export async function prepareSharedReport(scene,options={}){
-  const {scope,clean=false,displayName='',requestId=crypto.randomUUID(),kinds={},discussion,includePackage=false}=options;
+  const {scope,clean=false,displayName='',requestId=crypto.randomUUID(),kinds={},discussion,includePackage=false,proposalId}=options;
   if(!scene?.review||!scene.files)fail('Open a score before submitting findings.');
   const {identity,snapshotId}=await identify(scene.files),expected=newReview(identity,snapshotId,scene.review.pages);
   const review=validateReview(scene.review,expected);
@@ -51,6 +51,7 @@ export async function prepareSharedReport(scene,options={}){
   if(clean&&scope.kind==='report')fail('Choose a partial or whole-work review before making a clean declaration.');
   for(const finding of review.findings)if(!['transcription','source_error','clarification'].includes(kinds[finding.id]??'transcription'))fail('Choose an encoding error, suspected source error, or clarification for each finding.');
   const result={requestId,review,scope:clone(scope),clean:clean===true,displayName:String(displayName).slice(0,200),kinds:clone(kinds)};
+  if(proposalId!=null){if(!safeId(proposalId))fail('The proposed score identity is invalid.');result.proposalId=proposalId;}
   // Known shared revisions already have immutable file blobs. The service can
   // assemble their recovery package without making a one-finding reporter upload
   // the entire printed edition again. Explicit file transfer remains available.
@@ -248,8 +249,16 @@ export async function hydrateTaskPackage(blob,inspectPdf,expected={}){
 
 export async function loadSharedTask(client,taskId,inspectPdf){
   const id=checkedPath(taskId),record=await client.request(`/api/tasks/${id}`);
-  return hydrateTaskPackage(await client.asset(record.packageUrl??`/api/tasks/${id}/package`),inspectPdf,
+  const instructions=record.instructions;
+  if(instructions?.schema!=='score-desk-trusted-instructions'||instructions.version!==1||typeof instructions.prompt!=='string'||!digest(record.packageSha256))fail('The project service must prepare trusted instructions before this task can be downloaded. Its original ID and baseline are retained.');
+  const issued=await hydrateTaskPackage(await client.asset(record.packageUrl??`/api/tasks/${id}/package`),inspectPdf,
     {expectedId:taskId,sha256:record.packageSha256??record.package?.sha256,expectedSharedSnapshotId:record.snapshotId??record.task?.shared?.snapshotId});
+  const policy=await parse(issued.payloads.get('instruction-policy.json'));
+  if(issued.prompt!==instructions.prompt||policy.schema!==instructions.schema||policy.version!==instructions.version||canonical(policy.guidance)!==canonical(instructions.guidance)||record.task&&canonical(record.task)!==canonical(issued.task))fail('The task instructions differ from the trusted project record.');
+  const paths=['project-guidance/AGENTS.md','project-guidance/HANDBOOK.md'];
+  if(!instructions.guidance||Object.keys(instructions.guidance).length!==paths.length)fail('Trusted project guidance is missing.');
+  for(const path of paths){const payload=issued.payloads.get(path),expected=instructions.guidance[path];if(!payload||!digest(expected)||await sha256(await payload.arrayBuffer())!==expected)fail('The bundled guidance differs from the trusted project instructions.');}
+  issued.prompt=instructions.prompt;issued.instructions=clone(instructions);return issued;
 }
 
 // A legacy local task can also travel as its original ZIP. Validation is identical
@@ -289,6 +298,13 @@ export async function loadSharedProposal(client,proposalOrId,inspectPdf){
   const parsed=await readSharedResponse(client,blob,inspectPdf),entry=responseRevision(parsed);
   if(proposal.taskId&&proposal.taskId!==parsed.issued.id)fail('The proposed revision belongs to a different original task.');
   entry.id=proposal.id;entry.createdAt=proposal.createdAt??entry.createdAt;
+  if(proposal.parentProposalId)entry.parentRevisionId=proposal.parentProposalId;
   const seed=entry.response.code.status==='changed'&&entry.response.rendering.status==='pending'?null:await workspaceSeed(entry,parsed.issued,inspectPdf);
+  if(seed){
+    const current=proposal.candidateCurrent,{identity,snapshotId}=await identify(seed.files);
+    if(!current||current.snapshotId!==snapshotId||current.origin?.kind!=='proposal'||current.origin.proposalId!==proposal.id||roles.some(role=>current.files?.[role]?.sha256!==identity[role].sha256||current.files[role].size!==identity[role].size))fail('The proposed score files differ from the shared candidate revision.');
+    seed.current=clone(current);
+    if(proposal.renderingProvenance)seed.returned.provenance={...seed.returned.provenance,sharedRendering:clone(proposal.renderingProvenance),parentProposalId:proposal.parentProposalId??null};
+  }
   return {entry,issued:parsed.issued,seed,proposal,blob};
 }

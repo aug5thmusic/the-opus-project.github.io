@@ -8,7 +8,31 @@ const $ = id => document.getElementById(id);
 const idPart = value => encodeURIComponent(value);
 const identity = user => user ? `@${user.login}${user.provenance === 'simulated-development-identity' ? ' · test account' : ''}` : 'Reading without signing in';
 const contentKey = async value => sha256(new TextEncoder().encode(canonical(value)));
-const hasApplications = record => Array.isArray(record?.applied) && record.applied.length > 0;
+export function proposalApplications(record) {
+  const findings = record?.findings ?? record?.task?.findings ?? [];
+  const applicable = new Set(findings.map(finding => finding.id));
+  const ids = new Set((record?.applied ?? []).flatMap(event => event.findingIds ?? []).filter(id => applicable.has(id)));
+  return {ids, applied: ids.size, total: applicable.size, complete: applicable.size > 0 && ids.size === applicable.size};
+}
+const applicationLabel = record => { const summary = proposalApplications(record); return `${summary.applied} of ${summary.total} findings applied to the project`; };
+export function proposalFindingState(record, findingId) {
+  if (proposalApplications(record).ids.has(findingId)) return 'Applied to the project';
+  const finding = record?.findings?.find(item => item.id === findingId), decision = finding?.decision ?? finding?.decisions?.at(-1);
+  return ({looks_correct: 'Looks correct · awaiting application', needs_correction: 'Still needs correction', needs_clarification: 'Needs clarification'})[decision?.state] ?? 'Waiting to be checked';
+}
+export function proposalReportIdentity(loaded, review) {
+  if (!loaded) return null;
+  const candidate = loaded.proposal?.candidateCurrent;
+  if (!loaded.seed || !candidate) throw new Error('Add the proposed PDF before reporting on these corrections, or open the project score to report on that version.');
+  if (candidate.snapshotId !== review?.snapshotId || ['source', 'rendered', 'ly'].some(role => candidate.files?.[role]?.sha256 !== review?.files?.[role]?.sha256)) throw new Error('The displayed score differs from this proposal. Reopen its exact version before submitting findings.');
+  return loaded.proposal.id;
+}
+export function reportFindingSelection({submitted, checked, coverageChecked}, scoped) {
+  if (!submitted) return {checked, disabled: false};
+  const selected = typeof coverageChecked === 'boolean' ? coverageChecked : true;
+  return {checked: scoped && selected, disabled: !scoped, coverageChecked: selected};
+}
+const submissionKind = path => path.includes('/reports') ? 'report' : path === '/api/tasks' ? 'task' : path === '/api/proposals' || /^\/api\/proposals\/[^/]+\/renderings$/.test(path) ? 'proposal' : null;
 function node(tag, text, className) { const element = document.createElement(tag); if (text != null) element.textContent = text; if (className) element.className = className; return element; }
 function action(text, handler, className) { const button = node('button', text, className); button.type = 'button'; button.onclick = handler; return button; }
 
@@ -33,7 +57,7 @@ export function matchingReportDraft(draft, {workId, snapshotId, mode, findingIds
   if (![null, 'report', 'partial', 'whole'].includes(draft.scope) || typeof draft.clean !== 'boolean' || !Array.isArray(draft.findings)) return null;
   for (const key of ['scopeNote', 'displayName', 'discussionUrl', 'discussionAuthor', 'discussionSummary']) if (typeof draft[key] !== 'string') return null;
   const allowed = new Set(findingIds);
-  return {...draft, findings: draft.findings.filter(finding => allowed.has(finding.id) && typeof finding.checked === 'boolean' && ['transcription', 'source_error', 'clarification'].includes(finding.kind))};
+  return {...draft, findings: draft.findings.filter(finding => allowed.has(finding.id) && typeof finding.checked === 'boolean' && (finding.coverageChecked === undefined || typeof finding.coverageChecked === 'boolean') && ['transcription', 'source_error', 'clarification'].includes(finding.kind))};
 }
 
 export function installShared(api) {
@@ -103,8 +127,9 @@ export function installShared(api) {
     $('sharedSignIn').hidden = Boolean(client?.user) || Boolean(client?.devAuth) || !client;
     $('sharedSignOut').hidden = !client?.user;
     $('sharedDevForm').hidden = !client?.devAuth;
-    if (proposal) for (const button of $('sharedProposalPanel').querySelectorAll('button')) button.disabled = busy || api.status().busy;
+    if (proposal) for (const button of $('sharedProposalPanel').querySelectorAll('button,input,select,textarea')) button.disabled = busy || api.status().busy || button.dataset.sharedUnavailable === 'true';
     const correct = $('sharedLooksCorrect'); if (correct) correct.disabled = busy || api.status().busy || !proposal?.seed;
+    const canonicalPdf = $('sharedUseProjectPdf'); if (canonicalPdf) canonicalPdf.hidden = !client?.user?.roles?.includes('maintainer');
   }
   function revoke(list) { for (const url of list) URL.revokeObjectURL(url); list.length = 0; }
   function download(blob, filename, label, parent, links = taskLinks) {
@@ -122,10 +147,13 @@ export function installShared(api) {
     const root = $('sharedReceipt'); root.replaceChildren(); root.hidden = false;
     const id = record.id ?? record.report?.id ?? record.proposal?.id ?? record.task?.id;
     if (!id) throw new Error('The service acknowledgement has no stable record ID. Retry this same submission.');
-    const state = kind === 'proposal' ? 'Awaiting review' : 'Submitted to the project';
+    root.dataset.recordId = id;
+    const application = proposalApplications(record), state = kind === 'proposal' ? application.complete ? 'Applied to the project' : application.applied ? 'Partly applied' : 'Awaiting review' : 'Submitted to the project';
     root.append(node('h3', state), node('p', kind === 'proposal' ? 'Your AI response is ready to check.' : 'Your submission is saved.'));
+    if (kind === 'proposal' && application.total) root.append(node('p', applicationLabel(record)));
     const link = node('a', `${kind === 'report' ? 'Report' : kind === 'proposal' ? 'Proposal' : 'Task'} receipt: ${id}`); link.href = receiptURL(kind, id).href; root.append(link);
     root.append(node('p', `${actorName(record)} · ${record.createdAt ?? ''}`));
+    if (kind === 'proposal') { const open = action('Check corrections', guard(() => openProposal(id)), 'primary'); open.id = 'sharedReceiptOpenProposal'; root.append(open); }
     if (kind !== 'task') root.append(action('Agent / maintainer handoff (optional)', guard(() => handoff(kind, id))));
     history.replaceState(null, '', link.href); root.scrollIntoView({block: 'nearest'});
   }
@@ -134,9 +162,9 @@ export function installShared(api) {
     const pending = await client.pending(); if (!pending.length) return;
     $('sharedPending').append(node('p', `${pending.length} submission${pending.length === 1 ? '' : 's'} waiting to send.`));
     for (const item of pending) {
-      const row = node('div', null, 'shared-retry'); row.append(node('span', `${item.path.includes('/reports') ? 'Review report' : item.path === '/api/tasks' ? 'Correction task' : item.path === '/api/proposals' ? 'AI response' : 'Review decision'} · ${new Date(item.createdAt).toLocaleString()}`));
+      const row = node('div', null, 'shared-retry'); row.append(node('span', `${item.path.includes('/reports') ? 'Review report' : item.path === '/api/tasks' ? 'Correction task' : item.path.endsWith('/renderings') ? 'Updated PDF' : item.path === '/api/proposals' ? 'AI response' : 'Review decision'} · ${new Date(item.createdAt).toLocaleString()}`));
       row.append(action('Retry safely', guard(() => run(async () => {
-        const result = await client.write(item.path, item.body); const kind = item.path.includes('/reports') ? 'report' : item.path === '/api/tasks' ? 'task' : item.path === '/api/proposals' ? 'proposal' : null;
+        const result = await client.write(item.path, item.body); const kind = submissionKind(item.path);
         if (result.workId && result.workId !== selected) { selected = result.workId; $('sharedWork').value = selected; await refreshWork(); }
         if (kind) receipt(kind, result); else status('Review decision acknowledged by the project.');
         await refreshPending(); if (selected) await refreshWork();
@@ -164,7 +192,7 @@ export function installShared(api) {
     $('sharedProposals').replaceChildren();
     if (!detail.proposals?.length) $('sharedProposals').append(node('p', 'No AI corrections to check yet.'));
     for (const item of detail.proposals ?? []) {
-      const card = node('article', null, 'shared-record'); card.append(node('strong', 'AI corrections'), node('p', hasApplications(item) ? 'Corrections applied to the project' : 'Waiting to be checked'), node('small', `${actorName(item)} · ${item.createdAt}`), action('Check corrections', guard(() => openProposal(item.id)))); $('sharedProposals').append(card);
+      const card = node('article', null, 'shared-record'); card.dataset.proposalId = item.id; card.append(node('strong', 'AI corrections'), node('p', applicationLabel(item)), node('small', `${actorName(item)} · ${item.createdAt}`), action('Check corrections', guard(() => openProposal(item.id)))); $('sharedProposals').append(card);
     }
     $('sharedReports').replaceChildren();
     for (const item of detail.reports ?? []) {
@@ -191,7 +219,7 @@ export function installShared(api) {
     try { const url = new URL(source); if (url.protocol !== 'https:') return; $('sharedLibrary').href = url.href; $('sharedSourceFallback').hidden = false; } catch {}
   }
   function alreadySubmitted(finding, scene) {
-    return (detail?.findings ?? []).find(existing => existing.author?.id === client?.user?.id && existing.reviewed?.snapshotId === scene.review.snapshotId && (existing.originalId ?? existing.annotation?.id) === finding.id && existing.comment === finding.comment && canonical(existing.annotation?.strokes ?? []) === canonical(finding.strokes));
+    return (detail?.findings ?? []).find(existing => existing.author?.id === client?.user?.id && existing.reviewed?.snapshotId === scene.review.snapshotId && (existing.reviewed?.proposalId ?? null) === (scene.sharedProposalId ?? null) && (existing.originalId ?? existing.annotation?.id) === finding.id && existing.comment === finding.comment && canonical(existing.annotation?.strokes ?? []) === canonical(finding.strokes));
   }
   async function reportForm(kind) {
     requireWork();
@@ -199,14 +227,16 @@ export function installShared(api) {
       await openScore();
       if (!api.capture().review) return;
     }
-    if (api.capture().review.files.source.sha256 !== detail.current.files.source.sha256) throw new Error('This local draft uses a different printed source. Open the selected work before reporting; the existing draft stays saved on this device.');
-    mode = kind; await api.flush(); reportScene = api.capture(); show();
+    if (proposal && proposal.proposal.workId !== selected) throw new Error('Open the selected work before submitting findings. The displayed AI version belongs to another work.');
+    const proposalId = proposalReportIdentity(proposal, api.capture().review);
+    if (!proposalId && api.capture().review.files.source.sha256 !== detail.current.files.source.sha256) throw new Error('This local draft uses a different printed source. Open the selected work before reporting; the existing draft stays saved on this device.');
+    mode = kind; await api.flush(); reportScene = {...api.capture(), sharedProposalId: proposalId}; show();
     const formGeneration = ++reportFormGeneration, originalEdits = reportFormEdits, draftWork = selected, draftSnapshot = reportScene.review.snapshotId;
-    reportDraftName = `report:${draftWork}:${draftSnapshot}:${kind}`;
+    reportDraftName = `report:${draftWork}:${draftSnapshot}:${kind}${proposalId ? ':' + proposalId : ''}`;
     reportLegacyDraftName = null;
     $('sharedReportForm').hidden = false; $('sharedFixSection').hidden = true;
     $('sharedReportHeading').textContent = 'Submit findings';
-    $('sharedDraftNotice').textContent = reportScene.review.snapshotId === detail.current.snapshotId ? '' : 'These findings refer to an earlier score version.';
+    $('sharedDraftNotice').textContent = proposalId ? 'Reporting on the AI version currently open.' : reportScene.review.snapshotId === detail.current.snapshotId ? '' : 'These findings refer to an earlier score version.';
     $('sharedDraftNotice').hidden = ! $('sharedDraftNotice').textContent;
     $('sharedScopeFields').hidden = false;
     $('sharedSendReport').textContent = 'Submit';
@@ -216,7 +246,8 @@ export function installShared(api) {
     $('sharedFindingChoices').replaceChildren();
     for (const finding of reportScene.review.findings) {
       const existing = alreadySubmitted(finding, reportScene), row = node('div', null, 'shared-finding-choice'), label = node('label'), checkbox = document.createElement('input');
-      checkbox.type = 'checkbox'; checkbox.checked = kind === 'review' || !existing; checkbox.dataset.sharedFinding = finding.id; checkbox.dataset.alreadySubmitted = String(Boolean(existing && kind !== 'review')); checkbox.disabled = Boolean(existing && kind !== 'review');
+      checkbox.type = 'checkbox'; checkbox.checked = kind === 'review' || !existing; checkbox.dataset.sharedFinding = finding.id; checkbox.dataset.submitted = String(Boolean(existing)); checkbox.dataset.alreadySubmitted = String(Boolean(existing && kind !== 'review')); checkbox.disabled = Boolean(existing && kind !== 'review');
+      if (existing) { checkbox.dataset.coverageChecked = 'true'; checkbox.onchange = () => { checkbox.dataset.coverageChecked = String(checkbox.checked); }; }
       label.append(checkbox, node('span', `#${finding.number} · page ${finding.page} · ${finding.comment || 'Highlighted passage'}${existing ? ' · already submitted' : ''}`)); row.append(label);
       const select = document.createElement('select'); select.dataset.sharedKind = finding.id; select.setAttribute('aria-label', `Finding ${finding.number} type`);
       for (const [value, text] of [['transcription', 'Error'], ['source_error', 'Possible error in the original'], ['clarification', 'Needs clarification']]) select.add(new Option(text, value));
@@ -228,7 +259,7 @@ export function installShared(api) {
     const draftContext = {workId: draftWork, snapshotId: draftSnapshot, mode: kind, findingIds: reportScene.review.findings.map(finding => finding.id)};
     const legacyName = `report:${draftWork}:${draftSnapshot}:review`;
     let savedDraft = matchingReportDraft(await client.draft(reportDraftName), draftContext);
-    if (!savedDraft) {
+    if (!savedDraft && !proposalId) {
       const legacyDraft = matchingReportDraft(await client.draft(legacyName), {...draftContext, mode: 'review'});
       if (legacyDraft) savedDraft = {...legacyDraft, legacyReviewDraft: true};
     }
@@ -242,7 +273,8 @@ export function installShared(api) {
       for (const finding of savedDraft.findings) {
         const checkbox = [...$('sharedFindingChoices').querySelectorAll('[data-shared-finding]')].find(input => input.dataset.sharedFinding === finding.id);
         const select = [...$('sharedFindingChoices').querySelectorAll('[data-shared-kind]')].find(input => input.dataset.sharedKind === finding.id);
-        if (checkbox && checkbox.dataset.alreadySubmitted !== 'true') checkbox.checked = finding.checked;
+        if (checkbox?.dataset.submitted === 'true') checkbox.dataset.coverageChecked = String(finding.coverageChecked ?? (savedDraft.mode === 'review' ? finding.checked : true));
+        else if (checkbox) checkbox.checked = finding.checked;
         if (select && select.dataset.alreadySubmitted !== 'true') select.value = finding.kind;
       }
     }
@@ -251,14 +283,19 @@ export function installShared(api) {
   function scopeControls() {
     const scoped = ['partial', 'whole'].includes($('sharedScopeFields').querySelector('input:checked')?.value);
     $('sharedScopeLabel').hidden = !scoped; $('sharedCleanLabel').hidden = !scoped;
+    for (const checkbox of $('sharedFindingChoices').querySelectorAll('[data-shared-finding]')) {
+      const choice = reportFindingSelection({submitted: checkbox.dataset.submitted === 'true', checked: checkbox.checked, coverageChecked: checkbox.dataset.coverageChecked === 'true'}, scoped);
+      checkbox.checked = choice.checked; checkbox.dataset.alreadySubmitted = String(choice.disabled); checkbox.disabled = busy || choice.disabled;
+    }
   }
   function saveReportForm() {
     if (!client || !reportScene || !reportDraftName || $('sharedReportForm').hidden) return;
     reportFormEdits++;
     const choices = [...$('sharedFindingChoices').querySelectorAll('[data-shared-finding]')], types = [...$('sharedFindingChoices').querySelectorAll('[data-shared-kind]')];
-    const draft = {version: 1, workId: selected, snapshotId: reportScene.review.snapshotId, mode, legacyReviewDraft: Boolean(reportLegacyDraftName), scope: $('sharedScopeFields').querySelector('input:checked')?.value ?? null, clean: $('sharedClean').checked,
+    const scope = $('sharedScopeFields').querySelector('input:checked')?.value ?? null, scoped = ['partial', 'whole'].includes(scope);
+    const draft = {version: 1, workId: selected, snapshotId: reportScene.review.snapshotId, mode, legacyReviewDraft: Boolean(reportLegacyDraftName), scope, clean: $('sharedClean').checked,
       scopeNote: $('sharedScopeNote').value, displayName: $('sharedDisplayName').value, discussionUrl: $('sharedDiscussionUrl').value, discussionAuthor: $('sharedDiscussionAuthor').value, discussionSummary: $('sharedDiscussionSummary').value,
-      findings: choices.map(input => ({id: input.dataset.sharedFinding, checked: input.checked, kind: types.find(select => select.dataset.sharedKind === input.dataset.sharedFinding)?.value ?? 'transcription'}))};
+      findings: choices.map(input => ({id: input.dataset.sharedFinding, checked: input.checked, ...(input.dataset.submitted === 'true' ? {coverageChecked: scoped ? input.checked : input.dataset.coverageChecked === 'true'} : {}), kind: types.find(select => select.dataset.sharedKind === input.dataset.sharedFinding)?.value ?? 'transcription'}))};
     client.saveDraft(reportDraftName, draft).catch(error => status(`The report form could not be saved locally: ${error.message}. Keep this page open; your score annotations are still kept separately.`, true));
   }
   async function sendReport(event) {
@@ -272,7 +309,7 @@ export function installShared(api) {
       const clean = kind !== 'report' && $('sharedClean').checked;
       const kinds = Object.fromEntries([...$('sharedFindingChoices').querySelectorAll('[data-shared-kind]')].filter(select => selectedIds.has(select.dataset.sharedKind)).map(select => [select.dataset.sharedKind, select.value]));
       const discussion = $('sharedDiscussionUrl').value.trim() ? {url: $('sharedDiscussionUrl').value.trim(), author: $('sharedDiscussionAuthor').value.trim(), summary: $('sharedDiscussionSummary').value.trim()} : undefined;
-      const options = {scope, clean, kinds, displayName: $('sharedDisplayName').value.trim(), ...(discussion ? {discussion} : {})};
+      const options = {scope, clean, kinds, displayName: $('sharedDisplayName').value.trim(), ...(discussion ? {discussion} : {}), ...(reportScene.sharedProposalId ? {proposalId: reportScene.sharedProposalId} : {})};
       options.requestId = await contentKey({kind: 'report', work: selected, actor: client.user.id, review: scene.review, ...options});
       const pending = (await client.pending()).find(record => record.body.requestId === options.requestId);
       status('Submitting…');
@@ -304,8 +341,8 @@ export function installShared(api) {
         taskAttempt = {workId: selected, issued, acknowledged: false};
       }
       status('Preparing download…');
-      const record = await client.write('/api/tasks', taskAttempt.issued.submit); taskAttempt.acknowledged = true;
-      showTask(taskAttempt.issued); receipt('task', record); await refreshPending(); status('Correction package saved in the project. Download the ZIP, attach it to your AI, and paste the instructions.');
+      const record = await client.write('/api/tasks', taskAttempt.issued.submit), delivered = await loadSharedTask(client, record.id, api.inspectPdf);
+      taskAttempt.acknowledged = true; showTask(delivered); receipt('task', record); await refreshPending(); status('Correction package saved in the project. Download the ZIP, attach it to your AI, and paste the instructions.');
     });
   }
   function showTask(issued) {
@@ -352,21 +389,76 @@ export function installShared(api) {
       await api.openFiles(item.seed?.files ?? item.issued.files); proposal = item; proposalPosition = 0;
       selected = item.proposal.workId ?? item.issued.task.shared.workId; $('sharedWork').value = selected;
       loadedSnapshot = api.capture().review.snapshotId;
+      await refreshWork();
       await renderProposal(); api.showFindings(); return item;
     });
     if (loaded) { close(); history.replaceState(null, '', receiptURL('proposal', id)); status('Compare the AI’s changes with the original score.'); }
+  }
+  function renderingForm(root) {
+    const section = node(proposal.seed ? 'details' : 'section', null, 'shared-pdf-upload'); section.id = 'sharedRenderingSection';
+    section.append(node(proposal.seed ? 'summary' : 'h4', proposal.seed ? 'Replace PDF' : 'Add PDF'));
+    section.append(node('p', 'Choose the PDF rendered from this proposal’s LilyPond.'));
+    const form = document.createElement('form'), fileLabel = node('label', 'PDF'), file = document.createElement('input');
+    file.id = 'sharedProposalPdf'; file.type = 'file'; file.accept = '.pdf,application/pdf'; file.required = true; fileLabel.append(file); form.append(fileLabel);
+    for (const [id, label, placeholder, required] of [['sharedPdfProducer', 'Rendered by', 'Person or tool that made this PDF', true], ['sharedPdfCompiler', 'LilyPond version (optional)', 'For example: 2.24.4', false]]) {
+      const field = node('label', label), input = document.createElement('input'); input.id = id; input.maxLength = 200; input.placeholder = placeholder; input.required = required; field.append(input); form.append(field);
+    }
+    const submit = node('button', proposal.seed ? 'Save new PDF version' : 'Add PDF', 'primary'); submit.id = 'sharedAddProposalPdf'; submit.type = 'submit'; form.append(submit);
+    form.onsubmit = guard(async event => { event.preventDefault(); await addProposalRendering('uploaded'); }); section.append(form); root.append(section);
+    const canonical = action('Use project PDF', guard(() => addProposalRendering('canonical'))); canonical.id = 'sharedUseProjectPdf'; canonical.hidden = !client?.user?.roles?.includes('maintainer'); root.append(canonical);
+  }
+  async function addProposalRendering(mode) {
+    requireUser(); if (!proposal) return;
+    const target = proposal, targetStamp = api.capture().stamp, file = mode === 'uploaded' ? $('sharedProposalPdf').files[0] : null;
+    const producer = mode === 'uploaded' ? $('sharedPdfProducer').value.trim() : null, compiler = mode === 'uploaded' ? $('sharedPdfCompiler').value.trim() : null;
+    if (mode === 'uploaded' && (!file || !producer)) throw new Error('Choose a PDF and say who or what rendered it.');
+    if (file && (!file.name.toLowerCase().endsWith('.pdf') || file.size > 100 * 1024 * 1024)) throw new Error('Choose a PDF no larger than 100 MB.');
+    const record = await run(async () => {
+      let body, key;
+      if (mode === 'uploaded') {
+        status('Checking the PDF…');
+        await api.lock(() => api.inspectPdf({source: target.issued.files.source, rendered: {name: file.name, blob: file}}));
+        const digest = await sha256(await file.arrayBuffer());
+        body = {mode, name: file.name, producer, ...(compiler ? {compiler} : {}), pdf: await blobBase64(file)};
+        key = {digest, name: file.name, producer, compiler};
+      } else {
+        const work = await client.request(`/api/works/${idPart(target.proposal.workId)}`);
+        body = {mode}; key = {snapshotId: work.current.snapshotId, repositoryRevision: work.current.repositoryRevision};
+      }
+      body.requestId = await contentKey({kind: 'proposal-rendering', parent: target.proposal.id, actor: client.user.id, mode, ...key});
+      status('Saving the PDF version…');
+      const child = await client.write(`/api/proposals/${idPart(target.proposal.id)}/renderings`, body);
+      show(); receipt('proposal', child); await refreshWork(); await refreshPending(); return child;
+    });
+    if (record && proposal?.proposal.id === target.proposal.id && api.matches(targetStamp)) await openProposal(record.id);
   }
   async function renderProposal() {
     const rendering = ++proposalRender;
     const root = $('sharedProposalPanel'); root.replaceChildren(); revoke(proposalImages); if (!proposal) { root.hidden = true; return; } root.hidden = false;
     const findings = taskFindings(proposal.issued); proposalPosition = Math.max(0, Math.min(proposalPosition, findings.length - 1));
     const finding = findings[proposalPosition], result = proposal.entry.response.results.find(item => item.id === finding.id), sharedFinding = proposal.proposal.findings?.find(item => item.id === finding.id);
-    $('renderedLabel').textContent = proposal.seed ? 'Proposed rendering · awaiting review' : 'Previous rendering · proposed PDF pending';
-    root.append(node('h3', 'Check AI corrections'), node('p', hasApplications(proposal.proposal) ? 'Corrections applied to the project' : 'Waiting to be checked', 'shared-proposal-state'));
-    if (proposal.proposal.stale) root.append(node('p', 'These corrections are for an earlier score version.', 'shared-warning'));
-    if (!proposal.seed) root.append(node('p', 'The updated PDF is missing. Add it before checking these corrections.', 'shared-warning'));
+    $('renderedLabel').textContent = proposal.seed ? proposalApplications(proposal.proposal).complete ? 'Applied rendering' : 'Proposed rendering' : 'Previous rendering · proposed PDF pending';
+    root.dataset.proposalId = proposal.proposal.id;
+    root.append(node('h3', 'Check AI corrections'), node('p', applicationLabel(proposal.proposal), 'shared-proposal-state'));
+    if (proposal.proposal.stale && proposal.proposal.candidate?.snapshotId !== proposal.proposal.current?.snapshotId) root.append(node('p', 'The project score has changed since this task.', 'shared-warning'));
+    if (!proposal.seed) root.append(node('p', 'The updated PDF is missing.', 'shared-warning'));
+    renderingForm(root);
+    if (proposal.proposal.revisions?.length > 1) {
+      const versions = node('details'); versions.id = 'sharedProposalVersions'; versions.append(node('summary', 'PDF versions'));
+      for (const revision of proposal.proposal.revisions) {
+        const label = `Version ${revision.renderingRevision ?? 0}${revision.id === proposal.proposal.id ? ' · currently open' : ''}`;
+        if (revision.id === proposal.proposal.id) versions.append(node('p', label));
+        else { const button = action(label, guard(() => openProposal(revision.id))); button.dataset.proposalId = revision.id; versions.append(button); }
+      }
+      root.append(versions);
+    }
     root.append(node('p', `Finding ${proposalPosition + 1} of ${findings.length}`));
-    const navigation = node('div', null, 'shared-inline-actions'); navigation.append(action('Previous', guard(async () => { proposalPosition--; await renderProposal(); })), action('Next', guard(async () => { proposalPosition++; await renderProposal(); }))); root.append(navigation);
+    const navigation = node('div', null, 'shared-inline-actions');
+    for (const [label, step] of [['Previous', -1], ['Next', 1]]) { const button = action(label, guard(async () => { proposalPosition += step; await renderProposal(); })); button.dataset.sharedUnavailable = String(proposalPosition + step < 0 || proposalPosition + step >= findings.length); navigation.append(button); }
+    const findingPicker = document.createElement('select'); findingPicker.id = 'sharedProposalFinding'; findingPicker.setAttribute('aria-label', 'Choose a reported finding');
+    findings.forEach((item, index) => findingPicker.add(new Option(`#${item.number} · ${proposalFindingState(proposal.proposal, item.id)}`, String(index)))); findingPicker.value = String(proposalPosition);
+    findingPicker.onchange = guard(async () => { proposalPosition = Number(findingPicker.value); await renderProposal(); }); navigation.append(findingPicker); root.append(navigation);
+    const findingStatus = node('p', proposalFindingState(proposal.proposal, finding.id), 'shared-finding-state'); findingStatus.id = 'sharedFindingStatus'; root.append(findingStatus);
     root.append(node('strong', 'Original report'), node('p', finding.comment), node('small', `${actorName(finding)} · page ${finding.origin?.page ?? finding.page ?? 'unspecified'}`), node('strong', 'AI response'), node('p', result.explanation));
     if (result.codeLocation) root.append(node('p', `Proposed code location: ${result.codeLocation}`));
     const details = node('details'), summary = node('summary', 'Original highlights'); details.append(summary);
@@ -384,7 +476,8 @@ export function installShared(api) {
     const proposedCode = proposal.entry.response.code.status === 'changed' ? proposal.entry.payloads.get(proposal.entry.response.code.path) : proposal.issued.files.ly.blob;
     download(proposedCode, 'proposed.ly', 'Proposed LilyPond', files, proposalImages);
     download(proposal.issued.files.rendered.blob, 'previous-rendering.pdf', 'Previous rendering', files, proposalImages);
-    files.append(node('pre', JSON.stringify({taskId: proposal.issued.id, candidate: proposal.proposal.candidate, rendering: proposal.entry.response.rendering}, null, 2))); root.append(files);
+    if (proposal.seed) download(proposal.seed.files.rendered.blob, 'proposed-rendering.pdf', 'Proposed PDF', files, proposalImages);
+    files.append(node('pre', JSON.stringify({taskId: proposal.issued.id, proposalId: proposal.proposal.id, parentProposalId: proposal.proposal.parentProposalId, candidate: proposal.proposal.candidate, rendering: proposal.entry.response.rendering, renderingProvenance: proposal.proposal.renderingProvenance}, null, 2))); root.append(files);
     if (proposal.entry.response.code.status === 'unchanged') files.append(node('p', 'LilyPond unchanged.'));
     else {
       const limit = 100 * 1024;
