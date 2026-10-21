@@ -11,7 +11,7 @@ function instructionsFrom(f,issued){
   if(explanation||regionComment)history.push({taskId:issued.id,codeSha256:issued.task.baseline.codeSha256,renderSha256:issued.task.baseline.renderSha256,explanation,regionComment});
   return history;
 }
-const instructionText=history=>(history??[]).map(h=>`Task ${h.taskId}\nReviewer: ${h.explanation||'[No additional explanation]'}\nRegion comment: ${h.regionComment||'[None]'}`).join('\n\n');
+const instructionText=history=>(history??[]).map(h=>`Task ${h.taskId}\nReviewer: ${h.explanation||'[No additional explanation]'}\nAnnotation comment: ${h.regionComment||'[None]'}`).join('\n\n');
 export async function restoreInstructionHistory(round){
   if(!round||round.reported.every(f=>f.instructionHistory!==undefined))return false;
   const issued=await retained(round.taskId);if(!issued)throw new Error('The issued task is missing; earlier human instructions cannot be restored.');
@@ -58,7 +58,7 @@ export async function followupTask(scene,context,progress,packageMaker){
   }
   task.payloads.set('historical/previous-rendering.pdf',issued.files.rendered.blob);task.payloads.set('historical/prior-response.json',json(entry.response));
   const lines=['','FOLLOW-UP OUTSTANDING FINDINGS (historical pages are never current anchors)'];
-  for(const f of requests)lines.push(`\n#${f.number} | ${f.id}`,`Current page: ${f.page??'not located; inspect historical context and complete current render'}`,`Original: ${f.comment}`,`Current region comment: ${f.currentAnchor?.comment||'[No current region comment]'}`,`Reviewer: ${f.reviewer.explanation||'[No additional explanation]'}`,`Earlier human instructions (historical, not approval):\n${instructionText(f.instructionHistory)||'[None]'}`,`Historical context: ${JSON.stringify(f.historicalContext)}`,`Origin: ${JSON.stringify(f.origin)}`,`Previous agent response: ${JSON.stringify(f.priorResponse??null)}`);
+  for(const f of requests)lines.push(`\n#${f.number} | ${f.id}`,`Current page: ${f.page??'not located; inspect historical context and complete current render'}`,`Original: ${f.comment}`,`Current annotation: ${f.currentAnchor?.bounds?'marked passage':f.currentAnchor?'text-only; page context only':'not located'}`,`Current annotation comment: ${f.currentAnchor?.comment||'[None]'}`,`Reviewer: ${f.reviewer.explanation||'[No additional explanation]'}`,`Earlier human instructions (historical, not approval):\n${instructionText(f.instructionHistory)||'[None]'}`,`Historical context: ${JSON.stringify(f.historicalContext)}`,`Origin: ${JSON.stringify(f.origin)}`,`Previous agent response: ${JSON.stringify(f.priorResponse??null)}`);
   task.payloads.set('review.txt',plain(await task.payloads.get('review.txt').text()+lines.join('\n')+'\n'));await finalizeTask(task);return task;
 }
 // A v1 package extension: older consumers retain ordinary current annotations;

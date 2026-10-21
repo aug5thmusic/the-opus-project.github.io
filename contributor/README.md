@@ -1,6 +1,6 @@
 # Contributor workspace
 
-This integrates the reviewed Score Desk into the existing static site. It includes brush annotations, clean/review/recovery packages, AI task and response handling, returned-revision review, follow-up tasks, and Finish and export with automatic logs and an explicit review scope. Existing Encodings search is intentionally deferred.
+This integrates the reviewed Score Desk into the existing static site. It includes brush annotations, clean/review/recovery packages, AI task and response handling, returned-revision review, follow-up tasks, and Finish review with automatic logs and an explicit review scope. Existing Encodings search is intentionally deferred.
 
 ## Build and preview
 

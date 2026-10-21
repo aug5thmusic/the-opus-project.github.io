@@ -4,7 +4,7 @@ import {readPackage,readZip} from '../workflow.js';
 import {restoreReturnedBackup} from '../returned.js';
 import {retain,retained} from '../handoff-store.js';
 import {sha256,clone} from '../model.js';
-if(location.hostname!=='127.0.0.1'||['8939','8945','8964'].includes(location.port))throw new Error('Use a fresh isolated loopback origin, never port 8939.');
+if(location.hostname!=='127.0.0.1'||['8939','8945','8964','8967'].includes(location.port))throw new Error('Use a fresh isolated loopback origin, never port 8939.');
 pdfjs.GlobalWorkerOptions.workerSrc='../vendor/pdf.worker.mjs';
 const frame=document.getElementById('app'),out=document.getElementById('results'),run=document.getElementById('run');
 const name='score-desk-upgrade-'+crypto.randomUUID(),channel=new BroadcastChannel(name),pending=new Map();

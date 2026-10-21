@@ -393,3 +393,5 @@ persistence. No completion, including entire-work scope, resolves findings,
 authenticates identity, sets `verified_by`, or establishes compilation or score
 verification. Older readers can access ordinary inputs/annotations but require
 this extension to retain completion declarations.
+
+Completed-review packages include manifest-hashed `SUBMIT_TO_GITHUB.txt` as an ordinary declared payload. It identifies the exact completion/candidate and available task-baseline chain, with unknown repository paths/commits explicit. The browser only prepares local files. The receiving Git-capable agent resolves and validates the target before opening a correction PR at https://github.com/the-opus-project/the-opus-project.github.io. Old packages need no new extension. Historical completion records, region fields and totals retain their existing semantics; text-only annotations have page context without marked geometry.

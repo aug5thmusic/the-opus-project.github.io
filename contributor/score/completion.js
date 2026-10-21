@@ -3,6 +3,7 @@ import {makeReturnedBackup} from './returned.js';
 import {returnedHistory} from './storage.js';
 import {seal,LIMITS} from './workflow.js';
 import {roles,sha256} from './model.js';
+import {githubInstructions,GITHUB_INSTRUCTIONS} from './github-handoff.js';
 export async function addCompletionHistory(payloads,review,round,revisionId,records){
   if(!records.length)return payloads;
   const manifest=JSON.parse(await payloads.get('manifest.json').text());manifest.extensions=[...(manifest.extensions??[]).filter(e=>e.schema!==COMPLETION_EXTENSION.schema),COMPLETION_EXTENSION];
@@ -23,5 +24,7 @@ export async function prepareCompletion(scene,declaration,attempt,progress,packa
   const manifest=JSON.parse(await payloads.get('manifest.json').text());manifest.kind='completed-review-handoff';manifest.completionId=record.id;payloads.set('manifest.json',jsonBlob(manifest));
   payloads.set('review.txt',new Blob(['COMPLETED-REVIEW HANDOFF\nRead completion-summary.txt for the declared scope and exact revision. This is not an issued AI correction task. All finding states remain included; no approval or score verification is established.\n\n',await payloads.get('review.txt').text()],{type:'text/plain;charset=utf-8'}));
   payloads=await addCompletionHistory(payloads,scene.review,scene.returned,scene.revisionId,mergeCompletions(scene.completions,[record]));
+  payloads.set(GITHUB_INSTRUCTIONS,new Blob([await githubInstructions(scene,record)],{type:'text/plain;charset=utf-8'}));
+  await seal(payloads,JSON.parse(await payloads.get('manifest.json').text()));
   if(payloads.size>LIMITS.count||[...payloads.values()].some(b=>b.size>LIMITS.file)||[...payloads.values()].reduce((n,b)=>n+b.size,0)>LIMITS.total)throw new Error('Completed package exceeds the supported import size limits.');return {record,payloads};
 }

@@ -68,7 +68,7 @@ function showScore(score) {
   const reportTitle = `Proofreading: ${score.composer} — ${score.title}`;
   const reportBody = `Work: ${score.composer} — ${score.title}\nResult: [no errors found / corrections needed]\nPages and measures checked:\nRevision checked:\nDetails:\nSource PDF: ${score.source_pdf}\nRendered PDF: ${new URL(score.pdf_url, window.location.href).href}`;
   const params = new URLSearchParams({category: 'general', title: reportTitle, body: reportBody});
-  document.querySelector('[data-feedback]').href = `https://github.com/dhruv9saini/the-opus-project/discussions/new?${params}`;
+  document.querySelector('[data-feedback]').href = `https://github.com/the-opus-project/the-opus-project.github.io/discussions/new?${params}`;
 
   const discussionNode = document.querySelector('[data-discussion]');
   window.addEventListener('message', (event) => {
@@ -82,7 +82,7 @@ function showScore(score) {
   discussionScript.async = true;
   discussionScript.crossOrigin = 'anonymous';
   const discussionOptions = {
-    repo: 'dhruv9saini/the-opus-project',
+    repo: 'the-opus-project/the-opus-project.github.io',
     'repo-id': 'R_kgDOUtZHyQ',
     category: 'General',
     'category-id': 'DIC_kwDOUtZHyc4DGioB',

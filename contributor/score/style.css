@@ -119,8 +119,8 @@ main,.returned-review main{grid-template-rows:auto minmax(0,1fr)}
   main:has(#commentDock:not([hidden])) #commentsPanel{max-height:calc(100% - 84px)}
 }
 
-/* Ordinary status belongs to the header; score space is reserved only for
-   active notices and isolation, never for empty status rows. */
+/* Save state belongs to the header; isolation appears only while active.
+   The fixed notification slot below reserves space independently of its text. */
 header{justify-content:space-between}
 .desk-brand{flex:none;min-width:106px}.desk-brand .eyebrow{display:block}
 header #storage{display:block;max-width:none;margin-top:2px;font-size:11px;line-height:15px;white-space:nowrap;overflow:visible}
@@ -158,3 +158,22 @@ header #storage.unsaved{color:#9a3023;font-weight:700}
 #handoffDownloads>.task-download:focus-visible{outline:3px solid #e7ac39;outline-offset:3px}
 #handoffDownloads>details{padding:4px 0;margin:0 0 8px}
 #aiPrompt{height:140px;min-height:100px}
+
+/* A reserved status slot keeps timer-driven messages from moving click targets. */
+#notices{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;flex:0 0 36px;height:36px;min-height:36px;max-height:36px;padding:3px 10px;overflow:hidden}
+#noticeCopy{grid-area:1/1;align-self:center;min-width:0;min-height:0;max-height:30px;overflow-y:auto;overflow-x:hidden}
+#notices #message,#notices #storageProblem{display:block;margin:0;max-width:none;overflow:visible;font-size:11px;line-height:14px;white-space:normal;overflow-wrap:anywhere}
+#notices #emergency,#notices #dismissMessage{grid-area:1/2;margin:0;align-self:center}
+header #storage{min-height:15px}
+button.icon-close{display:inline-grid;place-items:center;flex:none;width:30px;height:30px;min-width:30px;padding:0;line-height:1}
+button.icon-close svg{display:block;width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round}
+#notices #dismissMessage.icon-close{padding:0;font-size:inherit}
+#closeComments.icon-close{display:none}
+@media(max-width:1000px){#closeComments.icon-close{display:inline-grid;padding:0}}
+#workspaceDialog .handoff-actions{padding:10px 12px;gap:12px}
+#finishDialog{max-width:min(700px,calc(100vw - 28px))}
+#githubHandoff{border-top:1px solid var(--line);margin-top:14px;padding-top:4px}
+#githubPrompt label{display:block}
+#githubInstructions{display:block;margin-top:8px;min-height:160px;font:12px ui-monospace,monospace;line-height:1.5}
+#githubCopyStatus{font-size:12px;margin-left:8px}
+#finishDownloads>.download{display:inline-block;background:var(--accent);color:#fff;padding:10px 16px;border-radius:5px;text-decoration:none;font-weight:600}

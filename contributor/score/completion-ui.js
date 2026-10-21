@@ -1,13 +1,14 @@
 import {prepareCompletion} from './completion.js';
 import {SCOPES,completionFindings} from './completion-model.js';
 import {LIMITS} from './workflow.js';
+import {GITHUB_INSTRUCTIONS} from './github-handoff.js';
 const $=id=>document.getElementById(id);
 export function installCompletion(api){
   let job=null,attempt=null,urls=[],published=null;
-  const io={prepare:prepareCompletion,zip:api.zip,commit:api.commitCompletion};
+  const io={prepare:prepareCompletion,zip:api.zip,commit:api.commitCompletion,copy:text=>navigator.clipboard.writeText(text)};
   const declaration=()=>({scope:document.querySelector('input[name="finishScope"]:checked')?.value??'',note:$('finishNote').value,reviewer:$('finishReviewer').value});
   const status=text=>{$('finishStatus').textContent=text;};
-  function clear(){for(const url of urls)URL.revokeObjectURL(url);urls=[];$('finishDownloads').replaceChildren();$('finishSummary').textContent='';published=null;}
+  function clear(){for(const url of urls)URL.revokeObjectURL(url);urls=[];$('finishDownloads').replaceChildren();$('finishSummary').textContent='';$('githubHandoff').hidden=true;$('githubPrompt').hidden=true;$('githubInstructions').value='';$('prepareGithub').setAttribute('aria-expanded','false');$('finishForm').hidden=false;$('finishIntro').hidden=false;$('finishOverview').hidden=false;$('finishTitle').textContent='Finish review';published=null;}
   function controls(){
     const busy=Boolean(job);for(const field of $('finishForm').querySelectorAll('input,textarea'))field.disabled=busy;
     $('prepareFinish').disabled=busy||!declaration().scope||Boolean(published);$('closeFinish').disabled=busy;$('cancelFinish').hidden=!busy;$('cancelFinish').disabled=job?.phase==='committing';
@@ -21,6 +22,12 @@ export function installCompletion(api){
   }
   function cancel(){if(job?.phase==='preparing'){job.cancelled=true;status('Cancelling preparation. Your work is retained; editing resumes when preparation stops.');}else if(job)status('Saving the completion. Please wait for this atomic operation to finish.');else $('finishDialog').close();}
   $('finishReview').onclick=open;$('closeFinish').onclick=cancel;$('cancelFinish').onclick=cancel;
+  $('prepareGithub').onclick=()=>{if(!published||!api.matches(published))return;$('githubPrompt').hidden=false;$('prepareGithub').setAttribute('aria-expanded','true');};
+  $('copyGithub').onclick=async()=>{
+    if(!published||!api.matches(published))return;
+    try{await io.copy($('githubInstructions').value);$('githubCopyStatus').textContent='Instructions copied.';}
+    catch{$('githubCopyStatus').textContent='Select and copy the instructions below.';$('githubInstructions').focus();$('githubInstructions').select();}
+  };
   $('finishDialog').addEventListener('cancel',e=>{if(job){e.preventDefault();cancel();}});
   $('finishDialog').addEventListener('close',()=>{if(job&&!$('finishDialog').open)job.cancelled=true;});
   $('finishForm').oninput=()=>{if(!job){attempt=null;clear();status('Ready to prepare the selected review scope.');}controls();};
@@ -35,14 +42,15 @@ export function installCompletion(api){
       const {record,payloads}=await io.prepare(scene,fields,attempt,text=>status(text),api.packageMaker);if(!valid(scene))throw new Error('Preparation cancelled or review changed.');
       const zip=await io.zip(payloads,text=>status(text));if(!valid(scene))throw new Error('Preparation cancelled or review changed.');
       if(zip.size>LIMITS.zip)throw new Error('Completed ZIP exceeds the 256 MB import limit.');
-      const summary=await payloads.get('completion-summary.txt').text();if(!valid(scene))throw new Error('Preparation cancelled or review changed.');
+      const summary=await payloads.get('completion-summary.txt').text(),instructions=await payloads.get(GITHUB_INSTRUCTIONS).text();if(!valid(scene))throw new Error('Preparation cancelled or review changed.');
       thisJob.phase='committing';controls();status('Saving the completion for this exact revision…');await io.commit(record,scene.stamp);
       if(!valid(scene))throw new Error('Completion retained as history; downloads were not published because the dialog was closed.');
       const fragment=document.createDocumentFragment(),individual=document.createElement('details'),label=document.createElement('summary');label.textContent=`Individual files (${payloads.size})`;individual.append(label);
       for(const [path,blob]of [['score-desk-completed-review.zip',zip],...payloads]){const a=document.createElement('a'),url=URL.createObjectURL(blob);urls.push(url);a.href=url;a.download=path.replaceAll('/','__');a.textContent=path==='score-desk-completed-review.zip'?'Download completed-review ZIP':path;a.className='download';(path==='score-desk-completed-review.zip'?fragment:individual).append(a);}fragment.append(individual);
       $('finishSummary').textContent=summary;$('finishDownloads').append(fragment);published=scene.stamp;
+      $('githubInstructions').value=instructions;$('githubCopyStatus').textContent='';$('githubHandoff').hidden=false;$('finishForm').hidden=true;$('finishIntro').hidden=true;$('finishOverview').hidden=true;$('finishTitle').textContent='Review saved locally';$('finishDialog').scrollTop=0;
       try{if(fields.reviewer.trim())localStorage.setItem('score-desk-reviewer',fields.reviewer.trim());else localStorage.removeItem('score-desk-reviewer');}catch{}
-      status(`Package ready · ${SCOPES[record.scope]} ${record.totals.unresolved} unresolved; ${record.totals.missingDecisions} missing decisions. No score verification claimed.`);history();
+      status(`Package ready · ${{corrections:'Corrections reviewed',entire:'Entire work reviewed',partial:'Partial review'}[record.scope]} · ${record.totals.unresolved} unresolved · ${record.totals.missingDecisions} missing decisions. Scope declaration only.`);history();
     });}catch(error){clear();status(`Not finished: ${error.message} Your review is retained. Retry when ready.`);api.message($('finishStatus').textContent,true);if(thisJob.cancelled)attempt=null;}
     finally{if(job===thisJob)job=null;controls();}
   };

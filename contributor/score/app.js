@@ -27,7 +27,9 @@ let messageTimer,storageProblem='';
 function noticeLayout(){
   const same=!$('message').hidden&&$('message').textContent===storageProblem;
   $('storageProblem').textContent=storageProblem;$('storageProblem').hidden=!storageProblem||same;
-  $('notices').hidden=$('message').hidden&&!storageProblem&&$('emergency').hidden;
+  // Keep the reserved status slot even when its text expires. Timers must not
+  // move the toolbar, the PDF viewport, or a pending pointer target.
+  $('notices').hidden=false;
   $('notices').classList.toggle('error',Boolean(storageProblem)||$('message').dataset.error==='true');
   $('dismissMessage').hidden=$('message').hidden||same||busy;
 }
@@ -62,7 +64,7 @@ function controls(){
   $('findingState').disabled=!current()||!canEdit();$('deleteFinding').disabled=!current()||!canEdit();
   $('hide').disabled=!review||busy||Boolean(comparison);
   $('comparisonControl').hidden=!returned;
-  $('editTitle').textContent=comparison?'Previous rendering · read only':current()?`Editing finding #${current().number} · page ${current().page}`:'New finding';
+  $('editTitle').textContent=comparison?'Previous rendering · read only':current()?findingTitle(current()):'New finding · type or draw';
   noticeLayout();
   for(const button of document.querySelectorAll('.finding-open,.focus-finding')){button.disabled=!canEdit();button.title=comparison?'Switch to the current rendering to select current marks.':'';}
   document.dispatchEvent(new Event('score-desk-controls'));
@@ -124,7 +126,7 @@ async function openSnapshot(nextFiles=null,targetId=null,imported=null,seed=null
     }
     $('identity').replaceChildren();for(const r of roles){const s=document.createElement('span');s.textContent=`${r}: ${review.files[r].name}`;const b=document.createElement('b');b.textContent=`SHA-256 ${review.files[r].sha256}`;s.append(b);$('identity').append(s);}
     $('filesPanel').open=false;$('workspaceDialog').close();document.body.classList.add('review-open');setMode('navigate');renderFindings();await Promise.all(Object.values(views).map(renderPage));if(readFailure)storageFailure(readFailure);await saveNow();
-    message(returned?'Returned revision ready. Reported findings require explicit human review; no whole-score verification is claimed.':imported?'Package opened. Exact inputs, comments, and marks restored; prior saved review retained.':stored?'Reopened the review for these exact file bytes.':'Snapshot ready. Draw a finding.');
+    message(returned?'Returned revision ready. Reported findings require explicit human review; no whole-score verification is claimed.':imported?'Package opened. Exact inputs, comments, and marks restored; prior saved review retained.':stored?'Reopened the review for these exact file bytes.':'Snapshot ready. Add a finding.');
   }catch(e){for(const doc of docs)if(doc!==views.source.doc&&doc!==views.rendered.doc)await doc.destroy();throw e;}
   finally{busy=false;controls();}
 }
@@ -147,6 +149,7 @@ async function renderPage(v){
 }
 function drawOverlay(){const v=views.rendered,c=$('overlay'),ctx=c.getContext('2d');ctx.setTransform(1,0,0,1,0,0);ctx.clearRect(0,0,c.width,c.height);if(comparison||!review||!v.viewport||$('hide').checked)return;ctx.setTransform(v.dpr,0,0,v.dpr,0,0);paint(ctx,v.viewport,focused?review.findings.filter(f=>f.id===focused):review.findings,v.page,gesture?.stroke);}
 function current(){return review?.findings.find(f=>f.id===active);}
+const findingTitle=f=>`Editing finding #${f.number} · ${f.strokes.length?'page':'text-only · page context'} ${f.page}`;
 function nextColor(){const p=review.preferences;return p.autoColor?PALETTE[p.colorCursor].color:p.color;}
 function findingCapacity(){
   if(review.findings.length>=2000)throw new Error('Limit: 2,000 findings per review.');
@@ -173,20 +176,21 @@ function revealRendered(){if(document.body.dataset.score==='source')showScore('r
 function newFinding(reportedId=null){
   if(!canEdit())return;
   findingCapacity();cancelGesture();active=null;focused=null;prepared=true;pendingReportedId=typeof reportedId==='string'?reportedId:null;
-  revealRendered();setComments(false);setMode('draw');$('hide').checked=false;renderFindings();drawOverlay();$('overlay').focus({preventScroll:true});
-  message('Draw a passage, then comment.');
+  revealRendered();setComments(false);setMode('draw');$('hide').checked=false;renderFindings();drawOverlay();
+  (pendingReportedId?$('overlay'):$('comment')).focus({preventScroll:true});
+  message('Type a note or mark a passage.');
 }
 async function finishFinding(next=false){
   if(!canEdit())return;
   const f=current();
-  if(!f?.strokes.length){message('Paint at least one stroke before finishing this finding. Your comment is kept.',true);return;}
+  if(!f?.strokes.length&&!f?.comment.trim()){message('Add a note or mark a passage.',true);return;}
   busy=true;cancelGesture();controls();
   try{
     if(!await saveNow()||saveFailed||saveConflict){if(!storageProblem)message('Finding is still being edited. Retry Done or download a recovery ZIP.',true);return;}
     active=null;focused=null;prepared=next;pendingReportedId=null;setMode(next?'draw':'navigate');
     renderFindings();drawOverlay();setComments(false);
-    message(`Finding #${f.number} done.${next?' Draw the next finding.':''}`);
-  }finally{busy=false;controls();if(!active)$('overlay').focus({preventScroll:true});}
+    message(`Finding #${f.number} done.${next?' Add the next finding.':''}`);
+  }finally{busy=false;controls();if(!active)(next&&!f.strokes.length?$('comment'):$('overlay')).focus({preventScroll:true});}
 }
 async function selectFinding(id){
   if(!canEdit())return;
@@ -206,14 +210,14 @@ function renderFindings(){
   $('highlightColor').value=f?.color??(review?nextColor():PALETTE[0].color);
   $('colorSwatch').style.backgroundColor=$('highlightColor').value;
   $('autoColor').checked=review?.preferences.autoColor??false;
-  $('editTitle').textContent=f?`Editing finding #${f.number} · page ${f.page}`:'New finding';
+  $('editTitle').textContent=f?findingTitle(f):'New finding · type or draw';
   if(document.activeElement!==$('comment')||$('comment').dataset.findingId!==(f?.id??''))$('comment').value=f?.comment??'';
   $('comment').dataset.findingId=f?.id??'';$('findingState').value=f?.state??'open';
   const list=$('findings');list.replaceChildren();
-  if(!review?.findings.length){const p=document.createElement('p');p.className='hint';p.textContent='Draw a passage to start a finding. Add more strokes to the same comment, then choose Done & next.';list.append(p);}
+  if(!review?.findings.length){const p=document.createElement('p');p.className='hint';p.textContent='Choose New finding to type a note, or draw on the score.';list.append(p);}
   for(const finding of review?.findings??[]){
     const item=document.createElement('div');item.className=`finding ${finding.id===active?'active':''}`;item.dataset.findingId=finding.id;item.style.borderLeftColor=finding.color;
-    const open=document.createElement('button');open.className='finding-open';const title=document.createElement('b');title.textContent=`#${finding.number} · rendered page ${finding.page}`;const comment=document.createElement('span');comment.className='finding-comment';comment.textContent=finding.comment||'(Comment not entered)';const meta=document.createElement('small');meta.textContent=`${finding.state.replaceAll('_',' ')} · ${finding.strokes.length} stroke(s)`;open.append(title,comment,meta);
+    const open=document.createElement('button');open.className='finding-open';const title=document.createElement('b');title.textContent=`#${finding.number} · ${finding.strokes.length?'rendered page':'page context'} ${finding.page}`;const comment=document.createElement('span');comment.className='finding-comment';comment.textContent=finding.comment||'(Comment not entered)';const meta=document.createElement('small');meta.textContent=`${finding.state.replaceAll('_',' ')} · ${finding.strokes.length?finding.strokes.length+' stroke(s)':'text-only'}`;open.append(title,comment,meta);
     const choose=guard(()=>selectFinding(finding.id));open.onclick=e=>{e.stopPropagation();choose();};item.onclick=choose;
     const focus=document.createElement('button');focus.className='focus-finding';focus.textContent=focused===finding.id?'Show all':'Only show';focus.setAttribute('aria-label',focused===finding.id?'Show all findings':`Only show finding ${finding.number}`);focus.setAttribute('aria-pressed',String(focused===finding.id));
     focus.onclick=guard(async e=>{e.stopPropagation();if(!canEdit())return;cancelGesture();const exiting=focused===finding.id;focused=exiting?null:finding.id;$('hide').checked=false;revealRendered();const pageChanged=!exiting&&views.rendered.page!==finding.page;if(pageChanged){views.rendered.page=finding.page;$('renderedPage').value=finding.page;}renderFindings();drawOverlay();if(pageChanged)await renderPage(views.rendered);});
@@ -268,7 +272,7 @@ const commands={
 for(const [id,name]of Object.entries({navigate:'navigate',draw:'draw',newFinding:'new',saveFinding:'done',doneNext:'next',undo:'undo',redo:'redo',showAll:'showAll'}))$(id).onclick=guard(commands[name]);
 $('comment').addEventListener('input',guard(()=>{
   if(!canEdit()){$('comment').value=current()?.comment??'';return;}
-  if(!current()&&!prepared)return;const value=$('comment').value;if(!current()&&!value)return;
+  if(!current()&&!prepared)return;const value=$('comment').value;if(!current()&&!value.trim())return;
   if(!current())findingCapacity();checkpoint();const f=current()??createFinding();f.comment=value;changed();
 }));
 $('findingState').onchange=()=>{if(!current())return;if(!canEdit()){$('findingState').value=current().state;return;}checkpoint();current().state=$('findingState').value;changed();};

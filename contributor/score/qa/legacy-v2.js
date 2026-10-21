@@ -2,7 +2,7 @@
 // Keep this independent of current storage.js, including its lack of completion
 // merging/registry checks. Writer copied from the supplied completion-audit.
 import {makeRecovery,zipFiles} from '../export.js';
-if(location.hostname!=='127.0.0.1'||['8939','8945','8964'].includes(location.port))throw new Error('Use a fresh isolated loopback origin, never port 8939.');
+if(location.hostname!=='127.0.0.1'||['8939','8945','8964','8967'].includes(location.port))throw new Error('Use a fresh isolated loopback origin, never port 8939.');
 const channel=new BroadcastChannel(new URLSearchParams(location.search).get('channel'));
 let dbPromise,held,local,expectedRevision,dirty=false,changes=[],lastError=null;
 function database(){return dbPromise??=new Promise((resolve,reject)=>{

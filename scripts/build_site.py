@@ -27,7 +27,7 @@ SCORE_FILES = (
     "index.html", "style.css", "app.js", "model.js", "storage.js", "export.js",
     "workflow.js", "handoff-store.js", "handoff-ui.js", "returned.js",
     "returned-ui.js", "completion-model.js", "completion.js", "completion-ui.js",
-    "HANDOFF_FORMATS.md",
+    "HANDOFF_FORMATS.md", "github-handoff.js",
 )
 
 

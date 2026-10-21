@@ -4,7 +4,7 @@ import {sha256,validateReview,clone,bounds,PALETTE,VERSION} from '../model.js';
 import * as pdfjs from '../vendor/pdf.mjs';
 pdfjs.GlobalWorkerOptions.workerSrc='../vendor/pdf.worker.mjs';
 const frame=document.getElementById('app'),out=document.getElementById('results');
-if(['8939','8945','8964'].includes(location.port)||location.hostname!=='127.0.0.1'){out.textContent='QA refused: use an isolated loopback port, never 8939, 8945 or 8964.';document.getElementById('run').disabled=true;throw new Error(out.textContent);}
+if(['8939','8945','8964','8967'].includes(location.port)||location.hostname!=='127.0.0.1'){out.textContent='QA refused: use an isolated loopback port, never 8939, 8945, 8964 or 8967.';document.getElementById('run').disabled=true;throw new Error(out.textContent);}
 frame.src='../index.html';
 const log=s=>{out.textContent+=s+'\n';};
 const canonical=value=>JSON.stringify(value,(_k,v)=>v&&typeof v==='object'&&!Array.isArray(v)?Object.fromEntries(Object.entries(v).sort(([a],[b])=>a.localeCompare(b))):v);
@@ -22,7 +22,7 @@ async function alphaAt(finding,doc){await wait(()=>$('renderedPaper').getAttribu
 document.getElementById('run').onclick=async()=>{
   out.textContent='';document.getElementById('run').disabled=true;
   try{
-    if(['8939','8945','8964'].includes(location.port)||location.hostname!=='127.0.0.1')throw new Error('Run QA on a separate loopback port, never the user app on 8939.');
+    if(['8939','8945','8964','8967'].includes(location.port)||location.hostname!=='127.0.0.1')throw new Error('Run QA on a separate loopback port, never the user app on 8939.');
     await wait(()=>frame.contentDocument.body.dataset.ready==='true','app ready after any restore');
     const [source,render,ly]=await Promise.all(['source.pdf','multipage.pdf','score.ly'].map(async name=>fixtureBlob(name)));
     // An inert PDF comment makes test bytes distinct; PDF readers ignore trailing comments.

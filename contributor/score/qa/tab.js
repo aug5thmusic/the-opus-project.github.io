@@ -1,6 +1,6 @@
 import {fixtureBlob} from './fixtures.js';
 import {getSaved} from '../storage.js';
-if(['8939','8945','8964'].includes(location.port)||location.hostname!=='127.0.0.1')throw new Error('Run QA on an isolated loopback port, never 8939, 8945 or 8964.');
+if(['8939','8945','8964','8967'].includes(location.port)||location.hostname!=='127.0.0.1')throw new Error('Run QA on an isolated loopback port, never 8939, 8945, 8964 or 8967.');
 const params=new URLSearchParams(location.search),slot=params.get('slot'),channel=new BroadcastChannel(params.get('channel'));
 const frame=document.getElementById('app'),label=document.getElementById('status');
 frame.src='../index.html';
