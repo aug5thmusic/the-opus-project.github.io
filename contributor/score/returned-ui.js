@@ -35,13 +35,14 @@ export function installReturned(api,host){
     $('roundIdentity').textContent=`Reviewing ${scene.files.ly.name} · ${scene.files.rendered.name} · response ${round.responseId.slice(0,8)}`;
     const issued=await retained(round.taskId);if(api.capture().returned?.id!==round.id)return;
     const get=()=>api.capture().returned;
-    await api.corrections.open({key:round.id,issued,candidate:true,shared:false,
+    await api.corrections.open({key:round.id,issued,candidate:true,shared:false,filesPanel:'returnedPanel',
       ids:{previous:'previousFinding',next:'nextFinding',explanation:'roundExplanation',approve:'looksCorrect',reject:'stillCorrection',clarify:'needsClarification',state:'roundState'},
       matches:s=>s.returned?.id===round.id,
       findings:()=>issued.task.findings,
       result:id=>get()?.reported.find(f=>f.id===id)?.agent,
       explanation:id=>get()?.reported.find(f=>f.id===id)?.explanation??'',
-      saveExplanation:(id,value)=>api.updateReturned(r=>r.reported.find(f=>f.id===id).explanation=value),
+      draftKind:id=>get()?.reported.find(f=>f.id===id)?.draftKind??'needs_correction',
+      saveExplanation:async(id,value,kind)=>{api.updateReturned(r=>{const f=r.reported.find(f=>f.id===id);f.explanation=value;f.draftKind=kind??'needs_correction';});if(!await api.saveNow())throw new Error('Local storage did not confirm the draft.');},
       decision:id=>get()?.reported.find(f=>f.id===id)?.decision,
       state:id=>(get()?.reported.find(f=>f.id===id)?.state??'unchecked').replaceAll('_',' '),
       canApprove:()=>!api.capture().comparison,

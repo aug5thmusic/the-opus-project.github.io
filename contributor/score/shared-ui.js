@@ -466,7 +466,7 @@ export function installShared(api) {
       selected = item.proposal.workId ?? item.issued.task.shared.workId; $('sharedWork').value = selected;
       loadedSnapshot = api.capture().review.snapshotId;
       await refreshWork();
-      await renderProposal(); if (!item.seed) api.showFindings(); return item;
+      await renderProposal(); if (!item.seed) api.corrections.showFiles(); return item;
     });
     if (loaded) { close(); history.replaceState(null, '', receiptURL('proposal', id)); status('Compare the AI’s changes with the original score.'); }
   }
@@ -513,9 +513,9 @@ export function installShared(api) {
     const root = $('sharedProposalPanel'); root.replaceChildren(); revoke(proposalImages); if (!proposal) { root.hidden = true; return; } root.hidden = false; root.setAttribute('aria-busy','true');
     const findings = taskFindings(proposal.issued); proposalPosition = Math.max(0, Math.min(proposalPosition, findings.length - 1));
     const finding = findings[proposalPosition], result = proposal.entry.response.results.find(item => item.id === finding.id), sharedFinding = proposal.proposal.findings?.find(item => item.id === finding.id);
-    $('renderedLabel').textContent = proposal.seed ? 'After · returned rendering' : 'After unavailable · previous rendering shown';
+    $('renderedLabel').textContent = proposal.seed ? 'AI revision' : 'AI revision unavailable';
     root.dataset.proposalId = proposal.proposal.id;
-    root.append(node('h3', 'Check AI corrections'), node('p', applicationLabel(proposal.proposal), 'shared-proposal-state'));
+    root.append(node('h3', 'Revision details'), node('p', applicationLabel(proposal.proposal), 'shared-proposal-state'));
     if (proposal.proposal.stale && proposal.proposal.candidate?.snapshotId !== proposal.proposal.current?.snapshotId) root.append(node('p', 'The project score has changed since this task.', 'shared-warning'));
     if (!proposal.seed) root.append(node('p', 'The updated PDF is missing.', 'shared-warning'));
     renderingForm(root);
@@ -563,12 +563,13 @@ export function installShared(api) {
     if (!sharedFinding?.decisions?.length) decisionHistory.append(node('p', 'No shared decisions for this finding yet.'));
     root.append(decisionHistory, action('Project page and maintainer handoff', guard(async () => { show(); await refreshWork(); receipt('proposal', proposal.proposal); })));
     const target=proposal, key=`shared:${target.proposal.id}`;
-    await api.corrections.open({key,shared:true,candidate:Boolean(target.seed),issued:target.issued,
+    await api.corrections.open({key,shared:true,candidate:Boolean(target.seed),issued:target.issued,filesPanel:'sharedProposalPanel',
       ids:{previous:'previousCorrection',next:'nextCorrection',picker:'sharedProposalFinding',explanation:'sharedDecisionExplanation',approve:'sharedLooksCorrect',reject:'sharedStillCorrection',clarify:'sharedNeedsClarification',state:'sharedFindingStatus'},
       matches:s=>s.review?.snapshotId===loadedSnapshot&&!s.returned,
       findings:()=>taskFindings(target.issued),result:id=>target.entry.response.results.find(f=>f.id===id),
-      explanation:async id=>{const name=`decision:${target.proposal.id}:${id}`;return decisionDrafts.get(name)??(await client.draft(name))?.explanation??'';},
-      saveExplanation:(id,value)=>{const name=`decision:${target.proposal.id}:${id}`;decisionDrafts.set(name,value);return client.saveDraft(name,{explanation:value});},
+      explanation:async id=>{const name=`decision:${target.proposal.id}:${id}`;return decisionDrafts.get(name)?.explanation??(await client.draft(name))?.explanation??'';},
+      draftKind:async id=>{const name=`decision:${target.proposal.id}:${id}`;return decisionDrafts.get(name)?.kind??(await client.draft(name))?.kind??'needs_correction';},
+      saveExplanation:(id,value,kind)=>{const name=`decision:${target.proposal.id}:${id}`,draft={explanation:value,kind:kind??'needs_correction'};decisionDrafts.set(name,draft);return client.saveDraft(name,draft);},
       decision:id=>target.proposal.findings?.find(f=>f.id===id)?.decision,
       state:id=>proposalFindingState(target.proposal,id),canApprove:()=>Boolean(target.seed),
       location:id=>target.proposal.findings?.find(f=>f.id===id)?.location,

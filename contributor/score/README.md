@@ -16,32 +16,40 @@ Choose **Project contributions** for three ways to help:
 - **Check AI corrections**: compare the AI’s changes with the original and
   record a decision for each finding you checked.
 
-Checking corrections opens **Before · task baseline** beside **After · returned
-rendering**. The persistent finding toolbar carries the original comment, AI
-explanation, review explanation and progress. **Looks correct & next** advances
+Checking corrections opens **Before correction** beside **AI revision**, using
+the exact baseline supplied with this task and the exact returned rendering.
+The problem card displays the original comment, direct **Previous** and **Next**
+navigation, and three decisions. **Problems** opens a searchable list of report
+text, reported page and review status, with an **Unchecked only** filter.
+**Looks correct & next** advances
 only after storage acknowledges the decision; failed or uncertain saves keep the
 finding and draft selected. **Skip** makes no decision. This counts selected
 corrections, never full-score verification, application or publication.
 
-The compact strip keeps navigation, comment summaries, and decisions above the scores.
-**Finding details** opens full comments, the reviewer explanation, location
-bookmarks, original context, and package downloads without resizing the scores.
-**Tools** reveals the annotation toolbar; its existing keyboard shortcuts still work.
+**Still wrong…** opens **What is still wrong?**, with Send and Cancel. Select
+**The printed source is unclear** to request source clarification instead.
+Explanation drafts and that choice survive Cancel, Escape, navigation, reloads
+and failed submissions. **What the AI changed** opens the AI's explanation;
+long original comments have an explicit **Read full report** control.
+**Report another error** reveals the annotation tools on the AI revision.
+Downloads, progress, files and revision history are available through **More**.
 
-The left selector offers **Printed source** and restores the previous Before
-position when switched back. Only marks belonging to the displayed PDF appear;
+**Check printed source** restores the previous Before position when switched
+back. On narrow screens, a two-way score switch replaces the side-by-side view.
+Each score keeps its own page arrows, page number and zoom visible below it.
+Only marks belonging to the displayed PDF appear;
 the selected historical finding has an outline, and other marks are optional.
 An older report opens its original PDF with a **Reported on an earlier version**
 label. Legacy packages with only crops show those crops explicitly. New local
 follow-ups retain original PDFs and annotations as well as their crops.
 
-After starts at an explicitly approximate page unless a corresponding location
-was saved. Navigate and zoom independently, then choose **Locate corrected
-passage**. This saves a PDF viewing position, without drawing or creating a
+The AI revision starts at an explicitly approximate page unless a corresponding
+location was saved. **View options** says to find the passage in the AI revision,
+then choose **Remember this passage**. This optional action saves a PDF viewing position, without drawing or creating a
 finding, and does not approve anything. Locations bind the finding to the exact
 candidate code, PDF and snapshot. Shared locations use authenticated service
 storage and version checks; local locations travel in returned-review backups.
-**Save comparison package** also carries shared locations into a fresh local
+**Download review package** also carries shared locations into a fresh local
 workspace, without importing service approval authority. Older packages without
 locations continue to work. AI location claims are not confirmed bookmarks.
 The existing new-finding tools remain attached to After, and comment drafts stay
@@ -56,8 +64,8 @@ After merging and rebuilding, a maintainer can choose **Use project PDF** to
 retain the canonical build for proofreading. Another contributor checks that
 exact version before the maintainer records application. PDF timestamps or a
 different compiler can change the bytes; earlier approvals remain attached to
-the rendering that was checked. The sidebar shows each finding's state and the
-number applied to the project.
+the rendering that was checked. **More** shows the selected finding's state;
+**Files and review history** shows the number applied to the project.
 
 The service supplies the exact files and includes everyone's outstanding
 findings in a correction task. If the source library cannot be reached, select

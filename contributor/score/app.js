@@ -361,7 +361,7 @@ $('shortcutHelp').onclick=()=>{if(!busy){cancelGesture();$('shortcutsDialog').sh
 $('closeShortcuts').onclick=()=>$('shortcutsDialog').close();
 for(const dialog of document.querySelectorAll('dialog'))new MutationObserver(()=>{if(dialog.open)cancelGesture();controls();}).observe(dialog,{attributes:true,attributeFilter:['open']});
 for(const kind of ['source','rendered']){
-  const v=views[kind];const go=guard(async n=>{if(!v.doc)return;v.page=Math.max(1,Math.min(v.doc.numPages,Math.round(Number(n)||1)));$(`${kind}Page`).value=v.page;$(`${kind}Scroll`).scrollTo(0,0);await renderPage(v);});
+  const v=views[kind];const go=guard(async n=>{if(!v.doc)return;v.page=Math.max(1,Math.min(v.doc.numPages,Math.round(Number(n)||1)));$(`${kind}Page`).value=v.page;$(`${kind}Scroll`).scrollTo(0,0);await renderPage(v);controls();});
   $(`${kind}Page`).onchange=e=>go(e.target.value);$(`${kind}Zoom`).onchange=guard(()=>{const p=viewPosition(kind);if(p)v.position=p;return renderPage(v);});
   document.querySelectorAll(`[data-kind="${kind}"]`).forEach(b=>b.onclick=()=>go(v.page+(b.dataset.action==='next'?1:-1)));
 }
@@ -436,7 +436,7 @@ export const operations={makeRecovery,makePackage,zipFiles,download,putSaved};
 export {saveNow};
 export const sessionStatus=()=>({...stamp(),dirty,busy,persistedRevision,saveConflict,unprotected:unprotectedWork(),recoveryStamp:recoveryStamp&&{...recoveryStamp},active,focused,prepared,mode,gesture:Boolean(gesture),undoLength:undo.length,exporting:Boolean(exportJob)});
 const appApi={
-  viewPosition,positionView,showHistorical,
+  viewPosition,positionView,showHistorical,showScore,saveNow,
   leaveComparison:async()=>{await clearLeftDisplay();await positionView('source',{page:1,zoom:'fit'});appApi.corrections.close();},
   capture:()=>({review:clone(review),files,returned:clone(returned),active,doc:comparison?.current??views.rendered.doc,comparison:Boolean(comparison),stamp:stamp(),revisionId,workspaceId:recordKey(),persistedRevision,completions:clone(completions)}),matches:matchesStamp,status:sessionStatus,message,
   openImported:parsed=>openSnapshot(parsed.files,null,parsed.review,null,false,parsed.completionBundle),
