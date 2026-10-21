@@ -37,9 +37,9 @@ function noticeLayout(){
   $('dismissMessage').hidden=$('message').hidden||same||busy;
 }
 function dismissMessage(){clearTimeout(messageTimer);$('message').hidden=true;$('message').dataset.error='false';noticeLayout();}
-function message(text,error=false){
+function message(text,error=false,replace=false){
   // Routine confirmations expire; an unrelated action must not erase an error.
-  if(!error&&!busy&&!$('message').hidden&&$('message').dataset.error==='true')return;
+  if(!replace&&!error&&!busy&&!$('message').hidden&&$('message').dataset.error==='true')return;
   clearTimeout(messageTimer);$('message').textContent=text;$('message').hidden=!text;$('message').dataset.error=String(error);noticeLayout();
   if(text&&!error){const expire=()=>{if(busy){messageTimer=setTimeout(expire,1000);return;}dismissMessage();};messageTimer=setTimeout(expire,3500);}
 }
@@ -241,7 +241,7 @@ async function finishFinding(next=false){
     if(!await saveNow()||saveFailed||saveConflict){if(!storageProblem)message('Finding is still being edited. Retry Done or download a recovery ZIP.',true);return;}
     active=null;focused=null;prepared=next;pendingReportedId=null;setMode(next?'draw':'navigate');
     renderFindings();drawOverlay();setComments(false);
-    message(`Finding #${f.number} done.${next?' Add the next finding.':''}`);
+    message(`Finding #${f.number} saved locally.${next?' Add the next finding.':''}`);
   }finally{busy=false;controls();if(!active)(next&&!f.strokes.length?$('comment'):$('overlay')).focus({preventScroll:true});}
 }
 async function selectFinding(id){
@@ -436,7 +436,7 @@ export const operations={makeRecovery,makePackage,zipFiles,download,putSaved};
 export {saveNow};
 export const sessionStatus=()=>({...stamp(),dirty,busy,persistedRevision,saveConflict,unprotected:unprotectedWork(),recoveryStamp:recoveryStamp&&{...recoveryStamp},active,focused,prepared,mode,gesture:Boolean(gesture),undoLength:undo.length,exporting:Boolean(exportJob)});
 const appApi={
-  viewPosition,positionView,showHistorical,showScore,saveNow,
+  viewPosition,positionView,showHistorical,showScore,saveNow,finishFinding,
   leaveComparison:async()=>{await clearLeftDisplay();await positionView('source',{page:1,zoom:'fit'});appApi.corrections.close();},
   capture:()=>({review:clone(review),files,returned:clone(returned),active,doc:comparison?.current??views.rendered.doc,comparison:Boolean(comparison),stamp:stamp(),revisionId,workspaceId:recordKey(),persistedRevision,completions:clone(completions)}),matches:matchesStamp,status:sessionStatus,message,
   openImported:parsed=>openSnapshot(parsed.files,null,parsed.review,null,false,parsed.completionBundle),

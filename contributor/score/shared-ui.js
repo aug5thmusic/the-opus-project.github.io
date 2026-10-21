@@ -359,6 +359,33 @@ export function installShared(api) {
       status('Submitted to the project.');
     });
   }
+  async function submitFinding(findingId){
+    requireUser();requireWork();
+    if(proposal?.proposal.workId!==selected)throw new Error('Open the work for this AI revision before submitting. Your error is saved locally.');
+    return api.lock(async()=>{
+      await api.flush();
+      const scene=api.capture(),proposalId=proposalReportIdentity(proposal,scene.review);
+      if(!proposalId)throw new Error('Reopen the exact AI revision before submitting this error. Your draft is kept.');
+      scene.sharedProposalId=proposalId;
+      const finding=scene.review.findings.find(f=>f.id===findingId);
+      if(!finding||!finding.comment.trim()&&!finding.strokes.length)throw new Error('Type a comment or mark the new error.');
+      const existing=alreadySubmitted(finding,scene);
+      if(existing)return {id:existing.reportId,url:receiptURL('report',existing.reportId).href};
+      scene.review.findings=[finding];
+      const options={scope:{kind:'report',description:'Reported errors'},clean:false,kinds:{[findingId]:finding.state==='needs_source_clarification'?'clarification':'transcription'},displayName:'',proposalId};
+      options.requestId=await contentKey({kind:'report',work:selected,actor:client.user.id,review:scene.review,...options});
+      const pending=(await client.pending()).find(item=>item.body.requestId===options.requestId);
+      const body=pending?.body??await prepareSharedReport(scene,options);
+      let result;
+      try{result=await client.write(`/api/works/${idPart(selected)}/reports`,body);}
+      catch(error){if(error.status===401)show();throw new Error(`Submission not confirmed. Your error is saved locally; retry Submit error safely. ${error.message}`);}
+      const id=result.id??result.report?.id;
+      if(!id)throw new Error('Submission has no confirmed receipt. Your error is saved locally; retry Submit error safely.');
+      // A refresh failure does not undo a confirmed server receipt.
+      try{await refreshWork();await refreshPending();}catch{}
+      return {id,url:receiptURL('report',id).href};
+    });
+  }
   async function task() {
     requireUser(); requireWork();
     await run(async () => {
@@ -580,7 +607,7 @@ export function installShared(api) {
         const payloads=await makeReturnedBackup(scene.review,scene.files,round,null,{lookup:async id=>id===target.issued.id?target.issued:id===target.entry.id?target.entry:null});
         api.download(await api.zip(payloads),'score-desk-comparison.zip');
       }),
-      saveDecision:decision,
+      saveDecision:decision,submitFinding,
       saveLocation:async(findingId,location)=>{
         requireUser();
         const expectedVersion=target.proposal.findings.find(f=>f.id===findingId).locationVersion??0;

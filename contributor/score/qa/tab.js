@@ -28,7 +28,7 @@ const actions={
   async openSaved({id}){$('saved').value=id;$('reopen').click();await wait(()=>!api().sessionStatus().busy&&api().sessionStatus().workspaceId===id&&$('correctionComparison').getAttribute('aria-busy')==='false','returned workspace open');return stats();},
   round(){return {workspaceId:api().sessionStatus().workspaceId,busy:api().sessionStatus().busy||$('correctionComparison').getAttribute('aria-busy')==='true',progress:$('roundProgress').textContent,message:$('message').textContent,status:$('roundStatus').textContent};},
   roundDecide(){$('looksCorrect').click();return actions.round();},
-  async roundNext(){$('nextFinding').click();await wait(()=>$('correctionComparison').getAttribute('aria-busy')==='false','finding navigation');return actions.round();},
+  async roundNext(){$('skipCorrection').click();await wait(()=>$('correctionComparison').getAttribute('aria-busy')==='false','finding navigation');return actions.round();},
   roundReload(){$('roundReload').click();return actions.round();},
   roundStored(){return getSaved(api().sessionStatus().workspaceId);},
   async stored(){return (await getSaved(api().sessionStatus().snapshotId));},

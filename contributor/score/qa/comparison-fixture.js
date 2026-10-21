@@ -41,3 +41,18 @@ export async function manyProblemsFixture(issuedId){
   const response=JSON.parse(await issued.payloads.get('response-template.json').text());response.code={status:'unchanged',path:null};response.rendering={status:'pending',path:null,producer:'SIMULATED scale fixture',compiler:null};response.files={};response.results.forEach(result=>{result.status='unchanged_with_reason';result.explanation='SIMULATED navigation fixture; no musical review.';});
   const entry=responseRevision(await readResponse(await zipFiles(new Map([['response.json',json(response)]])),async()=>issued));await retain(entry);await handoff.returnedUI.open(entry);
 }
+
+// Visual QA can supply an already-rendered local score. No compilation or
+// external downloads; the synthetic reports make no musical correctness claim.
+export async function denseComparisonFixture(base64){
+  const pdf=new Blob([Uint8Array.from(atob(base64),c=>c.charCodeAt(0))],{type:'application/pdf'});
+  const files={source:{name:'local-layout-sample.pdf',blob:pdf},rendered:{name:'local-layout-sample.pdf',blob:pdf},ly:{name:'layout-fixture.ly',blob:new Blob(['% Layout test only; no transcription\n'])}};
+  const {identity,snapshotId}=await identify(files),doc=await pdfjs.getDocument({data:new Uint8Array(await pdf.arrayBuffer()),isEvalSupported:false}).promise;
+  const pages=[];for(let i=1;i<=doc.numPages;i++){const p=await doc.getPage(i);pages.push({page:i,view:[...p.view],rotation:p.rotate,userUnit:p.userUnit});}
+  const review=newReview(identity,snapshotId,pages);
+  const comments=['Check the slur ending in bar 2 against the printed source.','In the second system, compare the right-hand slur with the printed source: it appears to end one note early. Check that the articulation, accidental and left-hand rest are all preserved when reviewing this passage.',Array(12).fill('Extended report: compare the slur, articulation and accidental in the second system with the printed source.').join('\n')];
+  review.findings=comments.map((comment,i)=>({id:`dense-${i}`,number:i+1,page:Math.min(i+1,pages.length),color:'#ffd34d',comment,state:'open',strokes:[],bounds:null}));review.nextNumber=4;
+  const issued=await makeTask(review,files,doc,'page',()=>{});await doc.destroy();await retain(issued);
+  const response=JSON.parse(await issued.payloads.get('response-template.json').text());response.code={status:'unchanged',path:null};response.rendering={status:'pending',path:null,producer:'Layout sample only',compiler:null};response.files={};response.results.forEach(result=>{result.status='unchanged_with_reason';result.explanation='No musical change; local PDF used to check reading and annotation layout.';});
+  const entry=responseRevision(await readResponse(await zipFiles(new Map([['response.json',json(response)]])),async()=>issued));await retain(entry);await handoff.returnedUI.open(entry);
+}
