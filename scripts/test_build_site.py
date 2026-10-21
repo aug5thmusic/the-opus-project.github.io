@@ -14,6 +14,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import build_site
 import check
+from isolated_runner import IsolationUnavailable
 
 
 class RuntimeHTML(HTMLParser):
@@ -127,6 +128,33 @@ class ContributorBuild(unittest.TestCase):
                 build_site.main()
             compiler.assert_not_called()
         self.assertEqual(sentinel.read_text(), "untouched")
+
+    def test_compile_score_only_uses_isolated_runner(self):
+        source, pdf = self.root / 'source.ly', self.output / 'score.pdf'
+        with patch.object(build_site, 'compile_lilypond', return_value={'runtime': 'isolated'}) as isolated, \
+                patch.object(build_site.subprocess, 'run') as host:
+            self.assertEqual(build_site.compile_score(source, pdf, cwd=self.root), {'runtime': 'isolated'})
+            isolated.assert_called_once_with(source, pdf)
+            host.assert_not_called()
+
+    def test_missing_isolation_refuses_build_before_public_writes(self):
+        output = self.output / 'not-created'
+        with patch.object(sys, 'argv', ['build_site.py', str(output)]), \
+                patch.object(build_site, 'ensure_available', side_effect=IsolationUnavailable('no daemon')), \
+                patch.object(build_site.subprocess, 'run') as host:
+            with self.assertRaises(IsolationUnavailable):
+                build_site.main()
+            host.assert_not_called()
+        self.assertFalse(output.exists())
+
+    def test_host_fixture_helper_rejects_all_other_source_bytes(self):
+        from trusted_browser_fixtures import compile_trusted_fixture, FIXTURES
+        source, pdf = self.root / 'fixture.ly', self.output / 'fixture.pdf'
+        source.write_bytes(FIXTURES[0]+b'\n#(system "untrusted")')
+        with patch('trusted_browser_fixtures.subprocess.run') as host:
+            with self.assertRaisesRegex(ValueError, 'two exact hardcoded'):
+                compile_trusted_fixture(source, pdf)
+            host.assert_not_called()
 
     def test_catalog_urls_use_forward_slashes_on_windows(self):
         piece = self.root / "pieces/synthetic-work"

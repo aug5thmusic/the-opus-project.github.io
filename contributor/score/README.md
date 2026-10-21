@@ -43,11 +43,12 @@ packages the findings, revision hashes and available history automatically.
 
 Local files are processed in this browser until an explicit shared submission.
 Shared reports and packages retain their exact context in the project service.
-The app does not execute LilyPond, imported
-scripts, or an AI model. A separately instructed correcting agent may use an
-already-installed LilyPond to return an updated PDF; its declared compiler and
-file pairing remain unverified until reviewed. Existing encodings are never a
-source of musical notes.
+The browser does not execute LilyPond, imported scripts, or an AI model.
+Correction rendering requires the project's isolated compiler. The optional
+[restricted local runner](../../scripts/RESTRICTED_AGENT.md) gives a local vision
+model no tools and runs fixed rendering operations in a container. Without that
+runtime, rendering stays pending. A downloaded package cannot restrict an
+arbitrary external agent. Existing encodings are never a source of musical notes.
 
 Reviews are retained in IndexedDB database `score-desk-local-v1` version 3;
 issued tasks and proposals use `score-desk-handoffs-v1`. Storage is specific to
@@ -139,10 +140,12 @@ site. Generated downloads and test browser storage are disposable test evidence,
 not project scores or user review records.
 
 `node scripts/browser-tests.mjs --shared` also runs real HTTP/SQLite browser
-workflows and synthetic changed-code compilations through `build_site.compile_score`,
-the production rendering command. It requires an installed LilyPond and browser.
+workflows and actual compilations of two exact hardcoded synthetic fixtures through
+`trusted_browser_fixtures.py`. That narrowly limited host helper cannot compile
+imported code and provides no isolation evidence. It requires an installed LilyPond
+and browser. Production compilation uses `isolated_runner.py` exclusively.
 `--shared-only` runs both shared suites; `--revisions-only` runs the PDF revision,
 candidate-report and canonical application scenarios. The tests use isolated
 origins, test accounts, generated fixtures and temporary repositories.
 
-After **Finish review**, choose **Prepare GitHub contribution**. Download the completed ZIP and copy the instructions to a coding agent. It validates hashes, resolves the exact repository file and baseline, applies the reviewed candidate and opens a PR. A maintainer reviews/merges before publication. Unknown or ambiguous targets require resolution, never a blind overwrite; a local completion is not human verification.
+After **Finish review**, choose **Prepare GitHub contribution**. The handoff identifies the proposed contribution for inspection. It grants no Git or publication permission. Shared candidates use the trusted `scripts/prepare_publication.py` helper: it checks current service approvals, the exact repository baseline and one allowed LilyPond path, then asks for separate interactive confirmation before staging. It never commits, pushes, opens a PR or publishes. Publication requires separate human authorization of the concrete change. Legacy local completions first need a shared proposal and independent review for guarded staging.

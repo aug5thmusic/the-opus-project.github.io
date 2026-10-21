@@ -6,7 +6,7 @@ The brush editor, local reviews, recovery packages and completed-review exports 
 
 ## Build and preview
 
-Use the repository's normal build, with Python and LilyPond already available:
+Use the repository's normal build, with Python and the [isolated compiler runtime](../scripts/ISOLATED_RUNTIME.md) already available:
 
 ```sh
 mkdir -p .build
@@ -43,7 +43,7 @@ The automated driver `node scripts/browser-tests.mjs` runs the existing suites s
 
 ## Package compatibility and review safety
 
-The existing package contracts and IndexedDB version 3 are preserved. ZIP validation, file hashes, immutable issued baselines, stale-tab protections, original/returned rendering separation, and explicit completion scopes remain in force. The AI prompt permits local rendering with an already-installed LilyPond when actually performed; it does not claim compilation or human verification from the presence of a PDF. Imported code is never executed by the browser.
+The existing package contracts and IndexedDB version 3 are preserved. ZIP validation, file hashes, immutable issued baselines, stale-tab protections, original/returned rendering separation, and explicit completion scopes remain in force. Rendering imported LilyPond requires the isolated runtime; without it, an external agent can return a proposal with its PDF pending. The optional [restricted local broker](../scripts/RESTRICTED_AGENT.md) gives the model no tools and uses fixed isolated rendering operations. A ZIP alone cannot restrict an arbitrary external agent. Imported code is never executed by the browser.
 
 Local drafts still belong to their browser profile and origin (scheme, host and port). Export review/recovery/completion ZIPs before moving local-only work. Submitted reports, tasks and proposals instead belong to the shared project service and can be reopened by receipt. A fresh browser retrieves and validates the original shared task before importing its response; it never invents a replacement baseline. Local-only tasks still need their original retained task or an existing supported recovery package. They are not silently promoted into authenticated shared reports.
 

@@ -11,6 +11,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from isolated_runner import compile_lilypond, ensure_available
 
 ROOT = Path(__file__).resolve().parents[1]
 PIECES = ROOT / "pieces"
@@ -159,9 +160,7 @@ def check_catalog(expected: dict[str, object]) -> None:
 
 
 def compile_sources(sources: list[Path]) -> None:
-    lilypond = shutil.which("lilypond")
-    if not lilypond:
-        fail("lilypond is not installed")
+    ensure_available()
     with tempfile.TemporaryDirectory(prefix="opus-project-check-") as temp_dir:
         output_root = Path(temp_dir)
         for source in sources:
@@ -177,17 +176,7 @@ def compile_sources(sources: list[Path]) -> None:
             digest = hashlib.sha256(
                 str(source.relative_to(ROOT)).encode()
             ).hexdigest()[:12]
-            result = subprocess.run(
-                [lilypond, "-dno-point-and-click", "-o", str(output_root / digest), str(source)],
-                cwd=ROOT,
-                capture_output=True,
-                text=True,
-                timeout=120,
-                check=False,
-            )
-            if result.returncode:
-                detail = (result.stdout + result.stderr)[-4000:]
-                fail(f"{source.relative_to(ROOT)}: LilyPond failed\n{detail}")
+            compile_lilypond(source, output_root / (digest + '.pdf'))
             print(f"compiled {source.relative_to(ROOT)}")
 
 
@@ -203,6 +192,9 @@ def main() -> int:
             f"{forbidden[0].relative_to(ROOT)}"
         )
     catalog, sources = expected_catalog()
+    # Refuse before --write changes catalog data if the required compiler
+    # boundary is unavailable. No host compiler fallback exists.
+    ensure_available()
     if write:
         CATALOG.write_text(render_catalog(catalog), encoding="utf-8")
         print("wrote catalog.json")

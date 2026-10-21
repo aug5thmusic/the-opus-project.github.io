@@ -1,8 +1,8 @@
 // Returned-review metadata is separate from the content-hashed annotation model.
 import {clone,identify,newReview,sha256,STATES} from './model.js';
 import {retained} from './handoff-store.js';
-import {makeRecovery,zipFiles} from './export.js';
-import {makeTask,finalizeTask,taskFindings,contextPaths,seal,json,plain,readPackage,readResponse,strictJSON} from './workflow.js';
+import {makeRecovery,zipFiles,observationText} from './export.js';
+import {makeTask,finalizeTask,localTaskDelivery,taskFindings,contextPaths,seal,json,plain,readPackage,readResponse,strictJSON,LIMITS} from './workflow.js';
 export const resultState={changed:'corrected_pending_review',unchanged_with_reason:'open',needs_clarification:'needs_source_clarification'};
 // Instructions outlive approval. Each issued follow-up contributes one entry;
 // opening its response starts a fresh decision without losing earlier wording.
@@ -11,7 +11,6 @@ function instructionsFrom(f,issued){
   if(explanation||regionComment)history.push({taskId:issued.id,codeSha256:issued.task.baseline.codeSha256,renderSha256:issued.task.baseline.renderSha256,explanation,regionComment});
   return history;
 }
-const instructionText=history=>(history??[]).map(h=>`Task ${h.taskId}\nReviewer: ${h.explanation||'[No additional explanation]'}\nAnnotation comment: ${h.regionComment||'[None]'}`).join('\n\n');
 export async function restoreInstructionHistory(round){
   if(!round||round.reported.every(f=>f.instructionHistory!==undefined))return false;
   const issued=await retained(round.taskId);if(!issued)throw new Error('The issued task is missing; earlier human instructions cannot be restored.');
@@ -40,10 +39,10 @@ export async function renderingAttachment(entry,issued,file,inspectPdf){
   const inputs=returnedInputs(entry,issued);await inspectPdf({source:inputs.source,rendered:{name:file.name,blob:file}});
   return {id:crypto.randomUUID(),kind:'render-attachment',version:1,createdAt:new Date().toISOString(),taskId:issued.id,responseId:entry.id,parentRevisionId:entry.id,codeSha256:await sha256(await inputs.ly.blob.arrayBuffer()),rendered:{name:file.name,blob:file,size:file.size,sha256:await sha256(await file.arrayBuffer())},provenance:{supplier:'Local contributor selecting an existing PDF',declaredAt:new Date().toISOString(),relationship:'supplier-declared; not established by compilation',compiler:null,compilationPerformedByScoreDesk:false}};
 }
-export async function followupTask(scene,context,progress,packageMaker){
+export async function followupTask(scene,context,progress,packageMaker,{lookup=retained}={}){
   const {review,files,returned:round,doc}=scene;if(!round)throw new Error('Open a returned revision first.');
   if(review.files.ly.sha256!==round.codeSha256||review.files.rendered.sha256!==round.renderSha256)throw new Error('The current files do not match this returned revision.');
-  const issued=await retained(round.taskId),entry=await retained(round.responseId),outstanding=round.reported.filter(f=>f.state!=='resolved'),associated=new Set(round.reported.map(f=>f.associationId).filter(Boolean));
+  const issued=await lookup(round.taskId),entry=await lookup(round.responseId),outstanding=round.reported.filter(f=>f.state!=='resolved'),associated=new Set(round.reported.map(f=>f.associationId).filter(Boolean));
   const current=clone(review);current.findings=[];
   const requests=outstanding.map(f=>{
     const mark=review.findings.find(m=>m.id===f.associationId),old=taskFindings(issued).find(m=>m.id===f.id);
@@ -57,25 +56,47 @@ export async function followupTask(scene,context,progress,packageMaker){
     for(let i=0;i<2;i++){const path=`historical/${request.id}-${i?'clean':'marked'}.png`,blob=(original?issued.payloads:task.payloads).get(paths[i]);if(blob){task.payloads.set(path,blob);request.historicalContext[i?'clean':'marked']=path;}}
   }
   task.payloads.set('historical/previous-rendering.pdf',issued.files.rendered.blob);task.payloads.set('historical/prior-response.json',json(entry.response));
-  const lines=['','FOLLOW-UP OUTSTANDING FINDINGS (historical pages are never current anchors)'];
-  for(const f of requests)lines.push(`\n#${f.number} | ${f.id}`,`Current page: ${f.page??'not located; inspect historical context and complete current render'}`,`Original: ${f.comment}`,`Current annotation: ${f.currentAnchor?.bounds?'marked passage':f.currentAnchor?'text-only; page context only':'not located'}`,`Current annotation comment: ${f.currentAnchor?.comment||'[None]'}`,`Reviewer: ${f.reviewer.explanation||'[No additional explanation]'}`,`Earlier human instructions (historical, not approval):\n${instructionText(f.instructionHistory)||'[None]'}`,`Historical context: ${JSON.stringify(f.historicalContext)}`,`Origin: ${JSON.stringify(f.origin)}`,`Previous agent response: ${JSON.stringify(f.priorResponse??null)}`);
-  task.payloads.set('review.txt',plain(await task.payloads.get('review.txt').text()+lines.join('\n')+'\n'));await finalizeTask(task);return task;
+  await finalizeTask(task);return task;
+}
+// Preserve original imported bytes without re-exporting their filenames as
+// active configuration/scripts. The compatibility task is safe; this optional
+// JSON delta lets this app recover its byte-identical immutable original.
+async function originalTaskData(original,delivery){
+  const entries=[];
+  for(const [path,blob]of original){const safe=delivery.get(path);if(safe===blob||safe?.size===blob.size&&await sha256(await safe.arrayBuffer())===await sha256(await blob.arrayBuffer()))continue;
+    const bytes=new Uint8Array(await blob.arrayBuffer());let base64='';for(let offset=0;offset<bytes.length;offset+=24576)base64+=btoa(String.fromCharCode(...bytes.subarray(offset,offset+24576)));
+    entries.push({path,size:blob.size,sha256:await sha256(bytes),base64});
+  }
+  const result=json({schema:'score-desk-inert-original-task',version:1,entries,remove:[...delivery.keys()].filter(path=>!original.has(path))});
+  if(result.size>LIMITS.json)throw new Error('Original imported metadata is too large for an inert recovery record. The original task remains saved.');return result;
+}
+async function restoreOriginalTask(safe,blob){
+  if(!blob||blob.size>LIMITS.json)throw new Error('Original task recovery data is missing or too large.');
+  const data=strictJSON(await blob.text()),valid=path=>typeof path==='string'&&path.length<=240&&/^[A-Za-z0-9][A-Za-z0-9._/-]*$/.test(path)&&!path.split('/').some(p=>!p||p==='.'||p==='..');
+  if(data.schema!=='score-desk-inert-original-task'||data.version!==1||!Array.isArray(data.entries)||!Array.isArray(data.remove)||data.entries.length>LIMITS.count||data.remove.length>LIMITS.count||data.remove.some(path=>!valid(path)))throw new Error('Original task recovery metadata is invalid.');
+  const result=new Map(safe),seen=new Set();for(const path of data.remove)result.delete(path);
+  for(const item of data.entries){if(!valid(item.path)||seen.has(item.path)||typeof item.base64!=='string'||!Number.isSafeInteger(item.size)||item.size<0||item.size>LIMITS.file)throw new Error('Original task recovery entry is invalid.');seen.add(item.path);const bytes=Uint8Array.from(atob(item.base64),c=>c.charCodeAt(0));if(bytes.length!==item.size||await sha256(bytes)!==item.sha256)throw new Error('Original task recovery bytes differ.');result.set(item.path,new Blob([bytes]));}
+  return result;
 }
 // A v1 package extension: older consumers retain ordinary current annotations;
 // this app restores the explicit returned-workspace sidecar as a recovery branch.
-export async function makeReturnedBackup(review,files,round,payloads=null){
-  payloads??=await makeRecovery(review,files);const issued=await retained(round.taskId),entry=await retained(round.responseId);
+export async function makeReturnedBackup(review,files,round,payloads=null,{lookup=retained}={}){
+  payloads??=await makeRecovery(review,files);const issued=await lookup(round.taskId),entry=await lookup(round.responseId);
   const metadata={schema:'score-desk-returned-workspace-backup',version:1,returned:round,issued:{id:issued.id,kind:'task',createdAt:issued.createdAt,task:issued.task,review:issued.review},entry:{...entry,payloads:undefined},taskPaths:[],responsePaths:[]};
-  for(const [path,blob]of issued.payloads){payloads.set('history/task/'+path,blob);metadata.taskPaths.push(path);}
+  const delivery=await localTaskDelivery(issued);
+  for(const [path,blob]of delivery.payloads){payloads.set('history/task/'+path,blob);metadata.taskPaths.push(path);}
+  metadata.originalTaskData='history/original-task-data.json';payloads.set(metadata.originalTaskData,await originalTaskData(issued.payloads,delivery.payloads));
   for(const [path,blob]of entry.payloads){payloads.set('history/response/'+path,blob);metadata.responsePaths.push(path);}
   payloads.set('returned-workspace.json',json(metadata));const manifest=JSON.parse(await payloads.get('manifest.json').text());manifest.extensions=[{schema:metadata.schema,version:1,path:'returned-workspace.json'}];
-  payloads.set('review.txt',plain(await payloads.get('review.txt').text()+'\nRETURNED REVISION REVIEW\n'+round.reported.map(f=>`#${f.number} ${f.id} | ${f.state}\nOriginal: ${f.comment}\nReviewer: ${f.explanation}\nEarlier human instructions (historical, not approval):\n${instructionText(f.instructionHistory)||'[None]'}\nAI: ${f.agent.explanation}\nDecision: ${JSON.stringify(f.decision)}`).join('\n\n')));return seal(payloads,manifest);
+  payloads.set('review.txt',plain(await payloads.get('review.txt').text()+'\n'+observationText('RETURNED REVISION — historical, not approval',round.reported)));return seal(payloads,manifest);
 }
 export async function restoreReturnedBackup(parsed,inspectPdf){
   const extensions=parsed.manifest.extensions?.filter(e=>e.schema==='score-desk-returned-workspace-backup');if(!extensions?.length)return null;
   if(extensions.length!==1||extensions[0].version!==1||extensions[0].path!=='returned-workspace.json')throw new Error('Unsupported returned-review extension.');
   const meta=strictJSON(await parsed.payloads.get('returned-workspace.json').text());if(meta.schema!=='score-desk-returned-workspace-backup'||meta.version!==1)throw new Error('Unsupported returned-workspace backup.');
-  const taskMap=new Map(meta.taskPaths.map(path=>[path,parsed.payloads.get('history/task/'+path)])),taskPackage=await readPackage(await zipFiles(taskMap),inspectPdf),task=strictJSON(await taskMap.get('task.json').text()),issued={...meta.issued,task,review:taskPackage.review,files:taskPackage.files,payloads:taskMap};
+  let taskMap=new Map(meta.taskPaths.map(path=>[path,parsed.payloads.get('history/task/'+path)]));
+  if(meta.originalTaskData){if(meta.originalTaskData!=='history/original-task-data.json')throw new Error('Original task recovery path is invalid.');taskMap=await restoreOriginalTask(taskMap,parsed.payloads.get(meta.originalTaskData));}
+  const taskPackage=await readPackage(await zipFiles(taskMap),inspectPdf),task=strictJSON(await taskMap.get('task.json').text()),issued={...meta.issued,task,review:taskPackage.review,files:taskPackage.files,payloads:taskMap};
   if(![1,2].includes(task.version)||issued.id!==task.id||task.schema!=='score-desk-task'||task.baseline.snapshotId!==taskPackage.review.snapshotId||task.baseline.codeSha256!==taskPackage.review.files.ly.sha256||task.baseline.renderSha256!==taskPackage.review.files.rendered.sha256||task.baseline.sourceSha256!==taskPackage.review.files.source.sha256||task.baseline.annotationSha256!==await sha256(await taskMap.get('annotations.json').arrayBuffer())||!Array.isArray(task.findings)||task.findings.length>2000||new Set(task.findings.map(f=>f.id)).size!==task.findings.length)throw new Error('The retained task baseline in this backup does not match.');
   const responseMap=new Map(meta.responsePaths.map(path=>[path,parsed.payloads.get('history/response/'+path)]));const response=await readResponse(await zipFiles(responseMap),async id=>id===issued.id?issued:null),entry={...meta.entry,response:response.response,payloads:responseMap};
   if(entry.kind!=='response'||entry.taskId!==issued.id||typeof entry.id!=='string'||!/^[-\w]{1,80}$/.test(entry.id))throw new Error('Returned response metadata is invalid.');

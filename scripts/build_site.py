@@ -10,6 +10,7 @@ import sys
 from pathlib import Path
 
 from check import PIECES, ROOT, expected_catalog, load_metadata, render_catalog
+from isolated_runner import compile_lilypond, ensure_available
 
 PUBLIC_FILES = (
     "index.html",
@@ -28,7 +29,7 @@ SCORE_FILES = (
     "workflow.js", "handoff-store.js", "handoff-ui.js", "returned.js",
     "returned-ui.js", "completion-model.js", "completion.js", "completion-ui.js",
     "HANDOFF_FORMATS.md", "github-handoff.js", "shared-client.js", "shared-ui.js",
-    "shared-packages.js", "shared-config.json",
+    "shared-packages.js", "shared-config.json", "SECURITY.md",
 )
 
 
@@ -36,19 +37,13 @@ def fail(message: str) -> None:
     raise ValueError(message)
 
 
-def compile_score(source: Path, pdf: Path, *, cwd: Path, lilypond: str | None = None) -> None:
-    """Compile the exact source bytes using the production rendering command."""
-    compiler = lilypond or shutil.which("lilypond")
-    if not compiler:
-        fail("lilypond is not installed")
-    result = subprocess.run(
-        [compiler, "-dno-point-and-click", "-o", str(pdf.with_suffix("")), str(source)],
-        cwd=cwd, capture_output=True, text=True, timeout=120, check=False,
-    )
-    if result.returncode:
-        fail(f"{source}: LilyPond failed\n{(result.stdout + result.stderr)[-4000:]}")
-    if not pdf.is_file() or pdf.stat().st_size == 0:
-        fail(f"{source}: LilyPond did not produce {pdf}")
+def compile_score(source: Path, pdf: Path, *, cwd: Path) -> dict:
+    """Production compilation always crosses the enforced isolation boundary.
+
+    cwd is retained for callers; no working-tree directory is mounted. Only
+    the selected source bytes and trusted image resources reach the compiler.
+    """
+    return compile_lilypond(source, pdf)
 
 
 def contributor_assets(root: Path | None = None) -> dict[Path, Path]:
@@ -139,9 +134,7 @@ def main() -> int:
     if not parent.is_dir() or parent.is_symlink():
         fail(f"output parent must be an existing, non-symlink directory: {parent}")
 
-    lilypond = shutil.which("lilypond")
-    if not lilypond:
-        fail("lilypond is not installed")
+    ensure_available()
     catalog, _ = expected_catalog()
     reviews = review_queue()
     contributor_assets()
@@ -160,7 +153,7 @@ def main() -> int:
         deployed_source.parent.mkdir(mode=0o755, parents=True, exist_ok=True)
         shutil.copy2(source, deployed_source)
         pdf = output / Path(str(entry["pdf_url"]))
-        compile_score(deployed_source, pdf, cwd=output, lilypond=lilypond)
+        compile_score(deployed_source, pdf, cwd=output)
 
     print(f"built {len(catalog['scores'])} catalog works and {len(reviews['scores'])} review drafts in {output}")
     return 0

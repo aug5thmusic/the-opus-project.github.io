@@ -48,11 +48,13 @@ Only LilyPond notation belongs in the repository. Every attempt is entered visua
 
 ## Check a change
 
-Install LilyPond and run:
+Set up the [isolated compiler](scripts/ISOLATED_RUNTIME.md), then run:
 
 ```sh
 python3 scripts/check.py --write
 ```
+
+Compilation requires the supported local container runtime and fails closed when it is unavailable. Imported LilyPond can execute code; the project does not compile it directly on the host. The optional [restricted local AI runner](scripts/RESTRICTED_AGENT.md) uses an already installed vision model, with no paid API requirement.
 
 To preview the site with generated PDFs (choose an output path that does not already exist):
 

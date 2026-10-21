@@ -4,6 +4,7 @@ import {returnedHistory} from './storage.js';
 import {seal,LIMITS} from './workflow.js';
 import {roles,sha256} from './model.js';
 import {githubInstructions,GITHUB_INSTRUCTIONS} from './github-handoff.js';
+import {observationText} from './export.js';
 export async function addCompletionHistory(payloads,review,round,revisionId,records){
   if(!records.length)return payloads;
   const manifest=JSON.parse(await payloads.get('manifest.json').text());manifest.extensions=[...(manifest.extensions??[]).filter(e=>e.schema!==COMPLETION_EXTENSION.schema),COMPLETION_EXTENSION];
@@ -13,7 +14,7 @@ export async function addCompletionHistory(payloads,review,round,revisionId,reco
   payloads.set(COMPLETION_EXTENSION.path,bundle);
   const current=records.filter(r=>r.revision.id===revisionId).at(-1);
   const history='\nCOMPLETION HISTORY (full immutable records: completion-history.json)\n'+records.map(r=>`${r.id} | ${r.revision.id===revisionId?'matches current review state':'historical; does not declare current revision'} | ${SCOPES[r.scope]} | ${r.createdAt} | ${r.totals.unresolved} unresolved`).join('\n')+'\n';
-  payloads.set('completion-summary.txt',new Blob([(current?completionSummary(current):'HISTORICAL COMPLETIONS ONLY — none declares the current review revision.\n'+records.map(r=>completionSummary(r)).join('\n'))+history],{type:'text/plain;charset=utf-8'}));return seal(payloads,manifest);
+  payloads.set('completion-summary.txt',new Blob([observationText(current?'COMPLETED REVIEW':'HISTORICAL COMPLETIONS ONLY',{summary:current?completionSummary(current):records.map(r=>completionSummary(r)),history})],{type:'text/plain;charset=utf-8'}));return seal(payloads,manifest);
 }
 export async function prepareCompletion(scene,declaration,attempt,progress,packageMaker){
   for(const role of roles)if(await sha256(await scene.files[role].blob.arrayBuffer())!==scene.review.files[role].sha256)throw new Error('Current input bytes changed. Reopen the exact files before finishing.');

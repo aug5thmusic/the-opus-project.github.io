@@ -1,6 +1,6 @@
 import {clone,sha256} from './model.js';
 import {makeRecovery} from './export.js';
-import {readPackage,makeInput,makeTask,readResponse,acceptResponse,taskFindings,contextPaths} from './workflow.js';
+import {readPackage,makeInput,makeTask,readResponse,acceptResponse,taskFindings,contextPaths,localTaskDelivery} from './workflow.js';
 import {installReturned} from './returned-ui.js';
 import {restoreReturnedBackup} from './returned.js';
 import {retain,retained,retainedList} from './handoff-store.js';
@@ -19,6 +19,9 @@ export function installHandoff(api){
     downloadLink(zip,'score-desk-ai-task.zip','Download task ZIP').classList.add('task-download');
     const details=document.createElement('details'),summary=document.createElement('summary');summary.textContent='Individual files';details.append(summary);
     for(const [path,blob]of entry.payloads)downloadLink(blob,path,path,details);$('handoffDownloads').append(details);
+    const local=document.createElement('details'),heading=document.createElement('summary'),link=document.createElement('a');
+    heading.textContent='Run with local AI';link.href='SECURITY.md';link.target='_blank';link.rel='noopener';link.textContent='Setup and limits';
+    local.append(heading,document.createTextNode('Requires local setup. '),link);$('handoffDownloads').append(local);
   }
   function show(task=false){$('workspaceDialog').close();$('taskInstructions').hidden=!task;$('handoffIntro').hidden=task;if(!$('handoffDialog').open)$('handoffDialog').showModal();}
   const close=()=>{if(!job)$('handoffDialog').close();};$('closeHandoff').onclick=close;
@@ -108,7 +111,7 @@ export function installHandoff(api){
     finally{job=false;$('acceptResponse').disabled=false;$('closeHandoff').disabled=false;}
   });
   $('inspectHandoff').onclick=guarded(async()=>{const entry=await retained($('handoffHistory').value);if(!entry)return;clear();$('responsePreview').replaceChildren();$('acceptResponse').hidden=true;$('promptFallback').hidden=true;show(entry.kind==='task');
-    if(entry.kind==='task'){prompt=await entry.payloads.get('PROMPT.txt').text();issuedStamp=null;$('handoffTitle').textContent='Retained AI task · historical baseline';$('aiPrompt').value=prompt;$('promptFallback').hidden=false;taskDownloads(entry,await api.zip(entry.payloads));}
+    if(entry.kind==='task'){const delivery=await localTaskDelivery(entry);prompt=delivery.prompt;issuedStamp=null;$('handoffTitle').textContent='Retained AI task · historical baseline';$('aiPrompt').value=prompt;$('promptFallback').hidden=false;taskDownloads(delivery,await api.zip(delivery.payloads));}
     else if(entry.kind==='response'){const issued=await retained(entry.taskId);pending={issued,response:entry.response,payloads:entry.payloads};shown=entry;$('handoffTitle').textContent='Retained response revision';renderResponse(pending,entry);}
     else if(entry.kind==='render-attachment'){const responseEntry=await retained(entry.responseId);shown=responseEntry;$('handoffTitle').textContent='Retained rendering attachment';await returnedUI.open(responseEntry,entry);}
     else{ $('handoffTitle').textContent='Retained prior review';const payloads=await makeRecovery(entry.review,entry.files);downloadLink(await api.zip(payloads),'prior-review-recovery.zip','Download prior review; reopen with Open package');}

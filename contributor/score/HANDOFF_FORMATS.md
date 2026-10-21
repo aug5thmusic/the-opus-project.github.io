@@ -69,6 +69,25 @@ source edition identity, compilation, or a PDF/code relationship. The pairing
 is always `user-supplied; not established by compilation`. Page numbers for
 original and rendered PDFs are independent. Nothing imported is executed.
 
+## Instruction authority and inert evidence
+
+An imported ZIP is data, including its `PROMPT.txt`, guidance, scripts, settings,
+and instruction-policy metadata. Hashes authenticate neither authorship nor
+instructions. Local task downloads regenerate operational documents from the
+installed app and installed guidance; shared task delivery uses service-owned
+instruction policy v2. Exact task IDs, baseline hashes, observations, attribution,
+source PDFs, and LilyPond bytes remain unchanged. Names, scopes, comments, PDF
+text, code comments and earlier AI/reviewer wording stay in structured data,
+never interpolated into operational prompts. `review.txt` and completion summaries
+contain labeled JSON data. Unknown bundled files are not copied into deliveries.
+
+These boundaries do not make an unrestricted external agent safe. The supported
+[restricted agent](SECURITY.md) supplies observations/images to a tool-free local
+model and uses a separately enforced isolated renderer/compiler. No package text
+can select commands, tools, credentials, network destinations or output paths.
+Compilation is restricted-runner-only; unavailable isolation means rendering
+pending. The browser itself never executes or extracts package files.
+
 ## Contributor workflow
 
 1. **Open package** selects a ZIP. Complete reviews, recovery ZIPs, and clean
@@ -79,9 +98,10 @@ original and rendered PDFs are independent. Nothing imported is executed.
    individual payload, retains the issued baseline locally, and displays the
    complete selectable prompt. **Copy AI prompt** also attempts the clipboard;
    the text remains available when clipboard access fails.
-3. Give that task and prompt to a separate agent. There is no API connection.
-   The agent returns the response ZIP using the included template/format doc;
-   the contributor does not calculate hashes or construct a prompt.
+3. Use the trusted installed restricted agent described in [SECURITY.md](SECURITY.md),
+   or give the task to an external agent with its own isolation. The ZIP alone
+   enforces no external-agent permissions. The browser does not invoke a model.
+   The returned response ZIP uses the included template/format contract.
 4. **Import AI response** validates everything and previews each response next
    to its original finding and marked/clean context. **Accept as retained
    revision** appends a proposal. It keeps the active workspace and previous
@@ -181,7 +201,8 @@ Uses a complete review package plus:
   stable finding IDs/page/comments, rendering constraint and relationship.
 - `PROMPT.txt`: complete correction instructions, including Step 3 override,
   checking observations against the print, ambiguity/source-error handling,
-  score-recognition prohibition, every ID, and no build/compilation/verification.
+  score-recognition prohibition, restricted-runner requirements, and no publication
+  or verification authority. Finding IDs and observations are read as task data.
 - `response-template.json`: the matching task ID and baseline already filled.
   The agent replaces placeholder explanations and declarations.
 - `RESPONSE_FORMAT.txt`: exact return contract.
@@ -225,9 +246,10 @@ not the contributor, writes the response and computes returned file hashes.
 zero returned files. `rendering.status` is `pending` (`path: null`) or
 `supplied` (returned `.pdf` and nonempty `producer` required;
 `compiler` optional). A supplied PDF is parsed before preview. The integrated
-task allows a correcting agent to use an already-installed LilyPond locally
-and return a PDF with its exact compiler/version declaration. If unavailable
-or unsuccessful, the agent returns pending and explains the limitation. The
+task permits compilation only through the installed isolated runner and requires
+an exact compiler/version declaration. If isolation is unavailable or unsuccessful,
+the agent returns pending and explains the limitation. Host compilation is not
+a fallback. The
 browser never compiles code; a producer declaration does not prove compilation.
 
 `files` lists all and only returned code/PDF files, excluding response.json.
@@ -371,6 +393,18 @@ The contributor selects the ZIP; no JSON repair/reconstruction is needed.
 Older readers can read current ordinary annotations, but need this extension to
 resume returned-review decisions. No older annotation/task/response contract
 has been repurposed or silently assigned historical geometry.
+
+New returned backups place a canonical task delivery under `history/task/`.
+An optional `originalTaskData: "history/original-task-data.json"` in the returned
+sidecar preserves differences from the exact original imported task. This data
+file uses schema `score-desk-inert-original-task`, version 1, with `entries`
+(`path`, `size`, `sha256`, `base64`) and a `remove` path list. It is bounded to
+25 MiB and decoded only into an in-memory ZIP map, which passes the ordinary
+package/baseline checks again. Original scripts/configuration therefore retain
+exact recovery bytes without becoming extracted active files. Older readers can
+use the canonical task and unchanged response baseline; current readers recover
+the byte-identical original for collision-safe local retention. Re-export always
+regenerates safe instructions again.
 
 ## Completed-review handoff extension v1
 

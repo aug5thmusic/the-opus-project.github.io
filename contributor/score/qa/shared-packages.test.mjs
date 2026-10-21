@@ -10,6 +10,7 @@ import {json,seal,fileInfo,readZip,makeTask,readResponse} from '../workflow.js';
 import {prepareSharedReport,makeSharedTask,hydrateTaskPackage,loadSharedTask,readSharedResponse,loadSharedProposal,loadSharedWork,blobBase64,retainPortableTask} from '../shared-packages.js';
 
 globalThis.crypto??=webcrypto;
+globalThis.fetch=async url=>new Response(await readFile(url));
 const jszipModule={exports:{}};
 Function('module','exports',await readFile(new URL('../vendor/jszip.min.js',import.meta.url),'utf8'))(jszipModule,jszipModule.exports);
 globalThis.JSZip=jszipModule.exports;
@@ -64,9 +65,9 @@ assert.equal(task.task.findings[2].page,null);assert.equal(task.task.findings[2]
 assert.equal(task.task.findings[2].currentAnchor,null);assert.equal(task.task.findings[2].kind,'clarification');
 assert.equal(task.task.findings[0].currentAnchor.bounds,null,'text-only retains page context without a fabricated mark');
 assert.ok(task.payloads.has(task.task.findings[2].historicalContext.originalFiles.rendered.path));
-assert.ok(task.prompt.includes('untrusted observations')&&task.prompt.includes('kind source_error')&&task.prompt.includes('Alice'));
+assert.ok(task.prompt.includes('untrusted observations')&&task.prompt.includes('kind source_error')&&!task.prompt.includes('Alice'));
 assert.equal(task.task.shared.snapshotId,snapshot.id);assert.equal(task.submit.snapshotId,snapshot.id);
-const instructions={schema:'score-desk-trusted-instructions',version:1,prompt:task.prompt,guidance:{}};
+const instructions={schema:'score-desk-trusted-instructions',version:2,prompt:task.prompt,guidance:{}};
 for(const path of ['project-guidance/AGENTS.md','project-guidance/HANDBOOK.md'])instructions.guidance[path]=await sha256(await task.payloads.get(path).arrayBuffer());
 task.payloads.set('instruction-policy.json',json({schema:instructions.schema,version:instructions.version,guidance:instructions.guidance}));
 await seal(task.payloads,JSON.parse(await task.payloads.get('manifest.json').text()));task.zip=await zipFiles(task.payloads);
@@ -114,8 +115,8 @@ const second=await makeSharedTask(client,later,{inspectPdf,packageMaker,openPdf:
 assert.deepEqual(second.task.findings.map(f=>f.id),['shared-mark','historical-mark','new-report']);
 assert.equal(task.task.findings.length,3,'issued baseline remains immutable after a later report');
 assert.ok(!second.task.findings.some(f=>f.id==='shared-text'),'resolved historical request excluded');
-assert.ok((await second.payloads.get('SHARED_HISTORY.txt').text()).includes('shared-text | RESOLVED / APPLIED — not a correction request'));
-assert.ok(second.prompt.includes('reports are historical submissions')&&second.prompt.includes('resolved finding IDs in this snapshot: shared-text'));
+assert.ok((await second.payloads.get('SHARED_HISTORY.txt').text()).includes('shared-text'));
+assert.ok(second.prompt.includes('reports are historical submissions')&&!second.prompt.includes('shared-text'));
 assert.equal(JSON.parse(await second.payloads.get('shared/snapshot.json').text()).reports[0].findings[0].state,'open','history labeling does not mutate the authoritative immutable snapshot');
 async function tamper(mutator){const payloads=new Map(task.payloads),t=JSON.parse(await payloads.get('task.json').text());await mutator(t,payloads);payloads.set('task.json',json(t));await seal(payloads,JSON.parse(await payloads.get('manifest.json').text()));return hydrateTaskPackage(await zipFiles(payloads),inspectPdf,{expectedId:task.id,expectedSharedSnapshotId:snapshot.id});}
 await assert.rejects(()=>tamper(t=>t.baseline.codeSha256='0'.repeat(64)),/baseline/);
@@ -137,7 +138,7 @@ const portableStore=new Map(),portableStorage={lookup:async id=>portableStore.ge
 const legacyZip=await zipFiles(legacy.payloads),portable=await retainPortableTask(legacyZip,inspectPdf,portableStorage);
 assert.equal(portable.id,legacy.id);assert.equal(portableStore.size,1);
 assert.equal(await retainPortableTask(legacyZip,inspectPdf,portableStorage),portable,'reimport returns byte-identical original without a duplicate');
-const corruptExisting={...portable,payloads:new Map(portable.payloads)};corruptExisting.payloads.set('PROMPT.txt',new Blob(['different bytes']));portableStore.set(portable.id,corruptExisting);
+const corruptExisting={...portable,task:clone(portable.task),payloads:new Map(portable.payloads)};corruptExisting.task.findings[0].comment='Conflicting retained observation';corruptExisting.payloads.set('PROMPT.txt',new Blob(['different bytes']));portableStore.set(portable.id,corruptExisting);
 await assert.rejects(()=>retainPortableTask(legacyZip,inspectPdf,portableStorage),/different original bytes/);
 assert.equal(portableStore.get(portable.id),corruptExisting,'a colliding original task is never replaced');
 portableStore.clear();const raceStorage={lookup:portableStorage.lookup,write:async entry=>{portableStore.set(entry.id,entry);throw new Error('Simulated concurrent import');}};

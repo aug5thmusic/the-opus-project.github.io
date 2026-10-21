@@ -16,7 +16,7 @@ export async function runSharedRevisions({browser,serve,evidence,root}){
   const check=(ok,label)=>{assert(ok,label);assertions++;log.push('PASS '+label);console.log('revisions: '+label);};
   const python=process.env.OPUS_PYTHON||'python';
   const compile=(source,pdf)=>{
-    const output=execFileSync(python,['-B','-c','import sys; from pathlib import Path; sys.path.insert(0,sys.argv[1]); from build_site import compile_score; compile_score(Path(sys.argv[2]),Path(sys.argv[3]),cwd=Path(sys.argv[3]).parent)',resolve(root,'scripts'),source,pdf],{cwd:root,encoding:'utf8',stdio:'pipe'});
+    const output=execFileSync(python,['-B','-c','import sys; from pathlib import Path; sys.path.insert(0,sys.argv[1]); from trusted_browser_fixtures import compile_trusted_fixture; compile_trusted_fixture(Path(sys.argv[2]),Path(sys.argv[3]))',resolve(root,'scripts'),source,pdf],{cwd:root,encoding:'utf8',stdio:'pipe'});
     log.push('LILYPOND '+output.trim());
   };
   const git=(...args)=>execFileSync('git',args,{cwd:repo,encoding:'utf8',stdio:'pipe'}).trim();
@@ -93,7 +93,7 @@ export async function runSharedRevisions({browser,serve,evidence,root}){
     check(clean.clean&&clean.scope.kind==='whole'&&clean.reviewed.proposalId===uploadedId&&clean.reviewed.snapshotId===uploaded.candidate.snapshotId,'explicit whole clean review is retained against the unmerged candidate');
     check((await state()).current.snapshotId===original.current.snapshotId&&(await state()).work.verified_by===null&&(await state()).findings.every(item=>item.state!=='resolved'),'candidate reports preserve canonical files, verification and other outstanding reports');
     await writeFile(resolve(piece,'score.ly'),changed);const mergedCommit=commit('SIMULATED merged proposed code');compile(resolve(piece,'score.ly'),renderPath);const rebuilt=await readFile(renderPath);
-    check(sha(rebuilt)!==sha(suppliedPdf),'actual production compiler command rebuilds identical code into different PDF bytes');
+    check(sha(rebuilt)!==sha(suppliedPdf),'hardcoded synthetic fixture recompiles into different PDF bytes (UI regression, not isolation evidence)');
     const application=(id,selected,requestId)=>api('/api/works/'+slug+'/applications',{method:'POST',token:maintainer.token,body:{requestId,proposalId:id,findingIds:selected,repositoryRevision:mergedCommit,pullRequest:'https://github.com/the-opus-project/the-opus-project.github.io/pull/999999'}});
     await api('/api/works/'+slug+'/applications',{method:'POST',token:maintainer.token,expected:409,body:{requestId:'premature-rebuilt',proposalId:uploadedId,findingIds:[ids[0]],repositoryRevision:mergedCommit,pullRequest:'https://github.com/the-opus-project/the-opus-project.github.io/pull/999999'}});
     check((await state()).findings.every(item=>item.state!=='resolved'),'old PDF approval cannot apply the rebuilt PDF');

@@ -15,7 +15,7 @@ source digests, attribution and authorization.
 ## Local startup
 
 Build the website using the repository's documented `scripts/build_site.py`
-command (LilyPond is required by that existing build), then run two processes:
+command (the [isolated compiler runtime](../scripts/ISOLATED_RUNTIME.md) must already be available), then run two processes:
 
 ```sh
 python -m http.server 8977 --bind 127.0.0.1 --directory .build/site
@@ -192,6 +192,26 @@ generic asset endpoint refuses unsafe historical task uploads and points to
 the prepared `/api/tasks/ID/package` instead. A task whose original context
 cannot be validated fails explicitly rather than acquiring a replacement
 baseline. Keep the service's project guidance files when deploying or updating.
+
+This projection also covers local/legacy imports, follow-up tasks and returned
+review backups. Original historical instructions remain inert audit data;
+downloads regenerate operational files from installed application code. Policy
+version 2 changes instruction delivery without changing the task baseline.
+Names, scopes, comments, PDF text and AI explanations cannot grant roles or
+advance approval, application or verification state.
+
+For execution use the optional [restricted local broker](../scripts/RESTRICTED_AGENT.md)
+and [isolated compiler](../scripts/ISOLATED_RUNTIME.md). The service itself never
+executes a correction task. Missing prerequisites disable execution; normal
+reporting, package downloads and proposal inspection remain available.
+
+Maintainer handoffs return an application-generated `publication` plan separately
+from the original report/proposal data. The trusted `scripts/prepare_publication.py`
+helper re-fetches current approvals and stages only the intended existing
+`pieces/WORK/score.ly` after a separate interactive confirmation. It rejects stale
+baselines, unrelated staged files, links and unexpected targets, and bypasses Git
+clean filters. It never commits, pushes, opens a PR or publishes. Package prose
+is not authorization for those later actions.
 
 ### Pending PDFs and rendering revisions
 
