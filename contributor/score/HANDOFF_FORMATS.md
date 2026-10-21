@@ -12,7 +12,7 @@ original and rendered PDFs are independent. Nothing imported is executed.
    inputs work. The three-file picker remains available. To make a clean ZIP,
    open three files once, expand retained history, and click **Download clean
    input package**. No JSON editing or hash calculation is needed.
-2. Paint and comment as before. **Export AI task** produces its ZIP and every
+2. Paint and comment as before. **Send for corrections** produces its ZIP and every
    individual payload, retains the issued baseline locally, and displays the
    complete selectable prompt. **Copy AI prompt** also attempts the clipboard;
    the text remains available when clipboard access fails.
@@ -311,7 +311,7 @@ has been repurposed or silently assigned historical geometry.
 
 ## Completed-review handoff extension v1
 
-**Finish and export** reuses the full review package, with optional returned
+**Finish review** reuses the full review package, with optional returned
 workspace extension, and adds a manifest extension:
 `{schema:"score-desk-completions",version:1,path:"completion-history.json"}`.
 This is a completed-review handoff, not an AI task. No finding is filtered out.

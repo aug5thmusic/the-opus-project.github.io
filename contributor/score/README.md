@@ -5,10 +5,10 @@ This is the integrated, browser-only version of the reviewed Score Desk. Open
 No account, notation installation, or backend is needed for these features.
 
 Open one package, or select the printed PDF, rendered PDF and LilyPond file once.
-Paint errors and add comments. **Export AI task** supplies the exact files,
+Paint errors and add comments. **Send for corrections** supplies the exact files,
 marked context, stable finding IDs, and a ready-to-copy prompt. **Import AI
 response** retains a proposal; **Review this returned revision** opens it for
-human comparison. **Finish and export** records an explicit review scope and
+human comparison. **Finish review** records an explicit review scope and
 packages the findings, revision hashes and available history automatically.
 
 Files are processed in this browser. The app does not execute LilyPond, imported
@@ -35,11 +35,15 @@ The source and rendered scores are side by side by default, including in a
 724 × 420 panel. Each has independent page, zoom and scroll controls. On narrow
 screens, **Both**, **Source** and **Rendered** let you enlarge either score.
 The comment editor appears automatically in a compact dock below both scores
-after painting; additional strokes can still join the group without closing it.
+after the first stroke, with the caret ready for typing. Additional strokes join
+the same group without repeatedly moving focus. Returned-review region marking
+keeps its association workflow and does not move focus to the comment.
 **Findings** opens a drawer for older comments and returned-review decisions.
 On desktop the editor and findings list stay beside both scores. **Workspace &
 files** holds file setup, saved reviews, packages, mark visibility
-and histories. **Cycle colors** stays beside the color picker in the review toolbar. **Open package** and **Finish and export** stay at the top.
+and histories. **Cycle colors** stays beside the color picker in the review toolbar. **Open package**, **Send for corrections** and **Finish review** stay at the top.
+Download the task ZIP and give it with the displayed prompt to your chosen agent;
+the desk does not send files or connect to an agent.
 
 Choose **Draw** and paint to create a finding, or choose **New finding** first.
 Preparing alone saves nothing and consumes no number or color. Completed strokes
@@ -50,15 +54,20 @@ A comment without a stroke is retained and must be marked before Done completes.
 A failed or conflicted save keeps editing open and offers the existing recovery
 ZIP. Undo reverses an automatic finding and its first stroke together.
 
-**Editing finding #N** identifies the stroke destination. **Only showing finding
+Saved/saving status appears in the header. Routine announcements disappear; errors,
+conflicts and recovery actions stay visible until handled. Isolation has a row
+only while active, and mode is shown by the selected toolbar button.
+
+**Editing finding #N** beside the comment identifies the stroke destination. **Only showing finding
 #N** is a separate visibility filter beside the rendered score. **Show all ×**
-clears that filter without changing the editor. In Pan mode, click a visible
+clears that filter without changing the editor. In Navigate mode, click a visible
 stroke or number to edit its comment; dragging pans without selecting. For
 overlapping marks the last painted finding wins; the findings list lets you
 select any underlying finding.
 
 The **?** button documents shortcuts: **N** prepares a finding, **D** draws,
-**V** pans, and **Ctrl+Enter** in the comment invokes Done & next. Letter
+**V** selects Navigate, and **Ctrl+Enter** in the comment invokes Done & next
+(**Cmd+Enter** on Mac). These hints are visible on the controls. Letter
 shortcuts ignore text fields, selects, contenteditable, composition and modifiers.
 Text fields keep native undo. Review mutations are blocked during busy operations,
 dialogs and previous-render comparison. Escape precedence is: native dialog
@@ -71,7 +80,7 @@ Run `node contributor/score/qa/check-integration.cjs` for static integration and
 module syntax checks. This does not compile a score or require installation.
 
 Browser suites must run sequentially on a separate, disposable loopback origin,
-never the contributor's normal origin. Ports 8939, 8945 and non-loopback hosts are
+never the contributor's normal origin. Ports 8939, 8945, 8964 and non-loopback hosts are
 refused. The suites create synthetic PDF geometry in memory, with no actual
 music, score recognition, downloaded scores or committed PDF/ZIP fixtures.
 

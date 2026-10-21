@@ -14,7 +14,12 @@ export function installHandoff(api){
   function resolutionControls(response){for(const button of $('responsePreview').querySelectorAll('[data-resolve-finding]'))button.disabled=resolving||!canResolve(response);}
   const clear=()=>{for(const url of links)URL.revokeObjectURL(url);links=[];$('handoffDownloads').replaceChildren();};
   function downloadLink(blob,name,label=name,parent=$('handoffDownloads')){const a=document.createElement('a'),url=URL.createObjectURL(blob);links.push(url);a.href=url;a.download=name.replaceAll('/','__');a.textContent=label;a.className='download';parent.append(a);return a;}
-  function show(){if(!$('handoffDialog').open)$('handoffDialog').showModal();}
+  function taskDownloads(entry,zip){
+    downloadLink(zip,'score-desk-ai-task.zip','Download task ZIP').classList.add('task-download');
+    const details=document.createElement('details'),summary=document.createElement('summary');summary.textContent='Individual files';details.append(summary);
+    for(const [path,blob]of entry.payloads)downloadLink(blob,path,path,details);$('handoffDownloads').append(details);
+  }
+  function show(task=false){$('workspaceDialog').close();$('taskInstructions').hidden=!task;$('handoffIntro').hidden=task;if(!$('handoffDialog').open)$('handoffDialog').showModal();}
   const close=()=>{if(!job)$('handoffDialog').close();};$('closeHandoff').onclick=close;
   $('handoffDialog').addEventListener('cancel',e=>{if(job){e.preventDefault();status('Preparing files. Editing stays blocked until this operation finishes.');}});
   // A closed dialog invalidates a running job, even if closed programmatically.
@@ -30,7 +35,7 @@ export function installHandoff(api){
   $('exportInput').onclick=guarded(async()=>{const s=api.capture();if(!s.review)return;await api.lock(async()=>{const files=await io.makeInput(s.files),zip=await api.zip(files);await api.download(zip,'score-desk-input.zip');});status('Clean input package downloaded (no findings).');});
   $('exportTask').onclick=guarded(async()=>{
     if(!api.capture().review||api.status().busy)return;
-    show();clear();$('responsePreview').replaceChildren();$('acceptResponse').hidden=true;$('handoffTitle').textContent='Export AI correction task';$('promptFallback').hidden=true;
+    show(true);clear();$('responsePreview').replaceChildren();$('acceptResponse').hidden=true;$('handoffTitle').textContent='Send for corrections';$('promptFallback').hidden=true;
     const s=api.capture(),token=++generation;job=true;$('closeHandoff').disabled=true;status('Preparing the exact baseline and visual context…');
     try{await api.lock(async()=>{
       const entry=s.returned?await returnedUI.io.followupTask(s,'120',text=>status(text),api.packageMaker):await io.makeTask(s.review,s.files,s.doc,'120',text=>status(text),api.packageMaker),zip=await api.zip(entry.payloads,text=>status(text));
@@ -39,14 +44,14 @@ export function installHandoff(api){
       await io.retain(entry);if(generation!==token||!api.matches(s.stamp))throw new Error('Task retained as historical; export was cancelled.');
       const text=await entry.payloads.get('PROMPT.txt').text();if(generation!==token||!api.matches(s.stamp))throw new Error('Task retained as historical; export was cancelled.');
       issuedStamp=s.stamp;prompt=text;$('aiPrompt').value=prompt;$('promptFallback').hidden=false;
-      for(const [path,blob]of entry.payloads)downloadLink(blob,path);downloadLink(zip,'score-desk-ai-task.zip','Download complete AI task ZIP');
+      taskDownloads(entry,zip);
       status(`AI task ready · ${entry.review.files.ly.name} · ${entry.task.findings.length} findings. Exact baseline retained locally.`);
     });await history();}catch(e){clear();prompt='';$('promptFallback').hidden=true;throw e;}
     finally{job=false;$('closeHandoff').disabled=false;}
   });
   $('copyPrompt').onclick=guarded(async()=>{
-    if(!prompt){status('Export an AI task first, or inspect a retained task.');return;}
-    show();$('aiPrompt').value=prompt;$('promptFallback').hidden=false;
+    if(!prompt){status('Choose Send for corrections first, or inspect a retained task.');return;}
+    show(true);$('aiPrompt').value=prompt;$('promptFallback').hidden=false;
     try{await navigator.clipboard.writeText(prompt);status('Prompt copied. Selectable text is also shown below.');}catch{status('Clipboard is unavailable. Select and copy the complete prompt below.');$('aiPrompt').focus();$('aiPrompt').select();}
   });
   $('importResponse').onclick=()=>$('responseFile').click();
@@ -92,8 +97,8 @@ export function installHandoff(api){
     try{const entry=await api.lock(()=>io.acceptResponse(pending));shown=entry;$('acceptResponse').hidden=true;clear();renderResponse(pending,entry);await history();status('Accepted as a new retained revision. Original review and newer local work remain unchanged.');}
     finally{job=false;$('acceptResponse').disabled=false;$('closeHandoff').disabled=false;}
   });
-  $('inspectHandoff').onclick=guarded(async()=>{const entry=await retained($('handoffHistory').value);if(!entry)return;clear();$('responsePreview').replaceChildren();$('acceptResponse').hidden=true;$('promptFallback').hidden=true;show();
-    if(entry.kind==='task'){prompt=await entry.payloads.get('PROMPT.txt').text();issuedStamp=null;$('handoffTitle').textContent='Retained AI task · historical baseline';$('aiPrompt').value=prompt;$('promptFallback').hidden=false;for(const [path,blob]of entry.payloads)downloadLink(blob,path);downloadLink(await api.zip(entry.payloads),'score-desk-ai-task.zip');}
+  $('inspectHandoff').onclick=guarded(async()=>{const entry=await retained($('handoffHistory').value);if(!entry)return;clear();$('responsePreview').replaceChildren();$('acceptResponse').hidden=true;$('promptFallback').hidden=true;show(entry.kind==='task');
+    if(entry.kind==='task'){prompt=await entry.payloads.get('PROMPT.txt').text();issuedStamp=null;$('handoffTitle').textContent='Retained AI task · historical baseline';$('aiPrompt').value=prompt;$('promptFallback').hidden=false;taskDownloads(entry,await api.zip(entry.payloads));}
     else if(entry.kind==='response'){const issued=await retained(entry.taskId);pending={issued,response:entry.response,payloads:entry.payloads};shown=entry;$('handoffTitle').textContent='Retained response revision';renderResponse(pending,entry);}
     else if(entry.kind==='render-attachment'){const responseEntry=await retained(entry.responseId);shown=responseEntry;$('handoffTitle').textContent='Retained rendering attachment';await returnedUI.open(responseEntry,entry);}
     else{ $('handoffTitle').textContent='Retained prior review';const payloads=await makeRecovery(entry.review,entry.files);downloadLink(await api.zip(payloads),'prior-review-recovery.zip','Download prior review; reopen with Open package');}

@@ -1,5 +1,5 @@
 import {getSaved,listSaved,returnedHistory} from '../storage.js';
-if(['8939','8945'].includes(location.port)||location.hostname!=='127.0.0.1')throw new Error('Run QA on a separate loopback port, never 8939 or 8945.');
+if(['8939','8945','8964'].includes(location.port)||location.hostname!=='127.0.0.1')throw new Error('Run QA on a separate loopback port, never 8939, 8945 or 8964.');
 const channelName='score-desk-races-'+crypto.randomUUID(),channel=new BroadcastChannel(channelName),pending=new Map(),ready=new Set();
 const out=document.getElementById('results'),run=document.getElementById('run'),next=document.getElementById('continue');
 for(const slot of ['A','B'])document.getElementById('open'+slot).href=`./tab.html?slot=${slot}&channel=${channelName}`;

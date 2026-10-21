@@ -46,7 +46,7 @@ export function installCompletion(api){
     });}catch(error){clear();status(`Not finished: ${error.message} Your review is retained. Retry when ready.`);api.message($('finishStatus').textContent,true);if(thisJob.cancelled)attempt=null;}
     finally{if(job===thisJob)job=null;controls();}
   };
-  document.addEventListener('score-desk-change',()=>{if(published&&!api.matches(published)){clear();status('Review changed. Earlier completions remain historical; choose Finish and export for this revision.');}history();});
+  document.addEventListener('score-desk-change',()=>{if(published&&!api.matches(published)){clear();status('Review changed. Earlier completions remain historical; choose Finish review for this revision.');}history();});
   document.addEventListener('score-desk-completions',history);
   return {io,open,capture:api.capture,job:()=>job};
 }

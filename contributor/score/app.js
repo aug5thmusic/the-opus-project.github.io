@@ -23,7 +23,29 @@ const matchesStamp=value=>value?.snapshotId===review?.snapshotId&&(value?.worksp
 const unprotectedWork=()=>Boolean(review&&(dirty||saveFailed)&&!matchesStamp(recoveryStamp));
 for(const entry of PALETTE)$('highlightColor').add(new Option(entry.name,entry.color));
 const views=Object.fromEntries(['source','rendered'].map(kind=>[kind,{kind,doc:null,page:1,viewport:null,serial:0,task:null}]));
-function message(text,error=false){$('message').textContent=text;document.querySelector('.statusbar').classList.toggle('error',error);}
+let messageTimer,storageProblem='';
+function noticeLayout(){
+  const same=!$('message').hidden&&$('message').textContent===storageProblem;
+  $('storageProblem').textContent=storageProblem;$('storageProblem').hidden=!storageProblem||same;
+  $('notices').hidden=$('message').hidden&&!storageProblem&&$('emergency').hidden;
+  $('notices').classList.toggle('error',Boolean(storageProblem)||$('message').dataset.error==='true');
+  $('dismissMessage').hidden=$('message').hidden||same||busy;
+}
+function dismissMessage(){clearTimeout(messageTimer);$('message').hidden=true;$('message').dataset.error='false';noticeLayout();}
+function message(text,error=false){
+  // Routine confirmations expire; an unrelated action must not erase an error.
+  if(!error&&!busy&&!$('message').hidden&&$('message').dataset.error==='true')return;
+  clearTimeout(messageTimer);$('message').textContent=text;$('message').hidden=!text;$('message').dataset.error=String(error);noticeLayout();
+  if(text&&!error){const expire=()=>{if(busy){messageTimer=setTimeout(expire,1000);return;}dismissMessage();};messageTimer=setTimeout(expire,3500);}
+}
+function storageStatus(text,problem=''){
+  const previous=storageProblem;storageProblem=problem;$('storage').textContent=text;$('storage').hidden=!text;$('storage').classList.toggle('unsaved',Boolean(problem));
+  if(previous&&!problem&&$('message').textContent===previous)dismissMessage();else noticeLayout();
+}
+$('dismissMessage').onclick=dismissMessage;
+const shortcutModifier=/Mac|iPhone|iPad/.test(navigator.userAgentData?.platform??navigator.platform)?'Cmd':'Ctrl';
+for(const label of document.querySelectorAll('[data-shortcut-modifier]'))label.textContent=shortcutModifier;
+$('doneNext').title=`Finish this group and prepare the next (${shortcutModifier}+Enter)`;
 function guard(fn){return async (...args)=>{try{await fn(...args);}catch(e){console.error(e);message(e.message,true);}};}
 // Annotation history includes its links, but never rolls back human decisions.
 function annotationState(){return {review:clone(review),active,prepared,pendingReportedId,workspaceId:returned?.id,associations:returned?.reported.map(f=>[f.id,f.associationId])};}
@@ -40,11 +62,12 @@ function controls(){
   $('findingState').disabled=!current()||!canEdit();$('deleteFinding').disabled=!current()||!canEdit();
   $('hide').disabled=!review||busy||Boolean(comparison);
   $('comparisonControl').hidden=!returned;
-  $('editingStatus').textContent=comparison?'Previous rendering · read only':current()?`Editing finding #${current().number}`:prepared?'New finding · paint to begin':'No finding being edited';
+  $('editTitle').textContent=comparison?'Previous rendering · read only':current()?`Editing finding #${current().number} · page ${current().page}`:'New finding';
+  noticeLayout();
   for(const button of document.querySelectorAll('.finding-open,.focus-finding')){button.disabled=!canEdit();button.title=comparison?'Switch to the current rendering to select current marks.':'';}
   document.dispatchEvent(new Event('score-desk-controls'));
 }
-function setMode(next){cancelGesture();mode=next;document.body.classList.toggle('drawing',mode==='draw');$('draw').setAttribute('aria-pressed',String(mode==='draw'));$('navigate').setAttribute('aria-pressed',String(mode==='navigate'));$('modeStatus').textContent=mode==='draw'?'Draw':'Navigate / Pan';}
+function setMode(next){cancelGesture();mode=next;document.body.classList.toggle('drawing',mode==='draw');$('draw').setAttribute('aria-pressed',String(mode==='draw'));$('navigate').setAttribute('aria-pressed',String(mode==='navigate'));}
 function cancelGesture(){if(gesture?.pointerId!==undefined&&$('overlay').hasPointerCapture(gesture.pointerId))$('overlay').releasePointerCapture(gesture.pointerId);gesture=null;drawOverlay();}
 async function openPdf(blob){return pdfjs.getDocument({data:new Uint8Array(await blob.arrayBuffer()),cMapUrl:'./vendor/cmaps/',cMapPacked:true,standardFontDataUrl:'./vendor/standard_fonts/',wasmUrl:'./vendor/wasm/',iccUrl:'./vendor/iccs/',isEvalSupported:false,enableXfa:false}).promise;}
 async function openSnapshot(nextFiles=null,targetId=null,imported=null,seed=null,force=false,completionBundle=null){
@@ -94,7 +117,7 @@ async function openSnapshot(nextFiles=null,targetId=null,imported=null,seed=null
     revisionId=stored?.returned&&!bundle?stored.revisionId??nextRevisionId:nextRevisionId;completions=mergeCompletions(stored?.completions,nextCompletions);
     saveFailed=false;saveConflict=false;recoveryStamp=null;active=null;focused=null;prepared=false;pendingReportedId=null;undo=[];redo=[];
     document.dispatchEvent(new Event('score-desk-change'));
-    $('emergency').hidden=true;$('storage').textContent=stored?'Saved locally':'Saving local snapshot…';
+    $('emergency').hidden=true;storageStatus(stored?'Saved locally':'Saving…');
     views.source.doc=docs[0];views.rendered.doc=docs[1];
     for(const v of Object.values(views)){
       v.page=1;v.viewport=null;$(`${v.kind}Page`).value='1';$(`${v.kind}Page`).max=v.doc.numPages;$(`${v.kind}Count`).textContent=`/ ${v.doc.numPages}`;$(`${v.kind}Scroll`).scrollTo(0,0);
@@ -159,7 +182,7 @@ async function finishFinding(next=false){
   if(!f?.strokes.length){message('Paint at least one stroke before finishing this finding. Your comment is kept.',true);return;}
   busy=true;cancelGesture();controls();
   try{
-    if(!await saveNow()||saveFailed||saveConflict){message('Finding is still being edited: local saving failed. Retry Done or download a recovery ZIP.',true);return;}
+    if(!await saveNow()||saveFailed||saveConflict){if(!storageProblem)message('Finding is still being edited. Retry Done or download a recovery ZIP.',true);return;}
     active=null;focused=null;prepared=next;pendingReportedId=null;setMode(next?'draw':'navigate');
     renderFindings();drawOverlay();setComments(false);
     message(`Finding #${f.number} done.${next?' Draw the next finding.':''}`);
@@ -178,8 +201,7 @@ function renderFindings(){
   $('commentDock').hidden=$('editor').hidden;
   if(focused&&!review?.findings.some(f=>f.id===focused))focused=null;
   const focusFinding=review?.findings.find(f=>f.id===focused);
-  $('focusStatus').textContent=focusFinding?`Only showing finding #${focusFinding.number}`:'Showing all findings';$('showAll').hidden=!focused;
-  $('editingStatus').textContent=f?`Editing finding #${f.number}`:prepared?'New finding · paint to begin':'No finding being edited';
+  $('focusStatus').textContent=focusFinding?`Only showing finding #${focusFinding.number}`:'';$('showAll').hidden=!focused;$('focusBar').hidden=!focused;
   $('toggleComments').textContent='Findings';
   $('highlightColor').value=f?.color??(review?nextColor():PALETTE[0].color);
   $('colorSwatch').style.backgroundColor=$('highlightColor').value;
@@ -225,7 +247,10 @@ $('overlay').addEventListener('pointerup',guard(async e=>{
     let f=review.findings.find(f=>f.id===completed.findingId);
     const total=review.findings.reduce((n,f)=>n+f.strokes.reduce((m,s)=>m+s.points.length,0),0);
     if(total+completed.stroke.points.length>200000||(f?.strokes.length??0)>=5000){message('Point/stroke limit reached. This stroke was not added; export this review before starting another.',true);drawOverlay();return;}
-    const creating=!f;if(creating)findingCapacity();checkpoint();if(creating)f=createFinding();f.strokes.push(completed.stroke);f.bounds=bounds(f.strokes);changed();
+    const creating=!f,focusComment=creating&&!pendingReportedId;if(creating)findingCapacity();checkpoint();if(creating)f=createFinding();f.strokes.push(completed.stroke);f.bounds=bounds(f.strokes);changed();
+    // Focus once, after committing real content. Pointerdown prevents subsequent
+    // strokes from blurring the editor; neither focus nor the dock scrolls PDFs.
+    if(focusComment&&canEdit()&&current()?.id===f.id)$('comment').focus({preventScroll:true});
   }else{
     if(!completed.dragged&&Math.hypot(e.clientX-completed.x,e.clientY-completed.y)<=5&&canEdit()&&!$('hide').checked){
       const f=hitFinding(views.rendered.viewport,focused?review.findings.filter(f=>f.id===focused):review.findings,views.rendered.page,...viewportPoint(e));
@@ -263,7 +288,7 @@ document.addEventListener('keydown',guard(async e=>{
   if(e.key==='Escape'){
     if(gesture){e.preventDefault();cancelGesture();return;}
     if(!canEdit())return;e.preventDefault();active=null;focused=null;prepared=false;pendingReportedId=null;setMode('navigate');renderFindings();drawOverlay();
-    message('Navigate / Pan. All saved marks and comments are kept.');return;
+    message('Navigate. Marks and comments kept.');return;
   }
   if((e.ctrlKey||e.metaKey)&&!e.altKey&&e.key==='Enter'&&e.target===$('comment')){e.preventDefault();await commands.next();return;}
   if(typing)return;
@@ -289,8 +314,8 @@ $('load').onclick=guard(async()=>{const selected={};for(const role of roles){con
 $('import').onchange=guard(async e=>{const file=e.target.files[0];e.target.value='';if(!file||busy)return;if(!review)throw new Error('Open the exact three input files before importing annotation JSON.');if(file.size>25*1024*1024)throw new Error('Review JSON exceeds 25 MB.');const captured=stamp(),value=JSON.parse(await file.text());if(busy||!matchesStamp(captured))throw new Error('The review changed while importing. Select the JSON again.');const imported=validateReview(value,review);cancelGesture();checkpoint();review=imported;active=null;changed();message('Imported matching review. All comments and strokes restored.');});
 // Persistence and package wiring are kept separate from the drawing surface.
 let saveFailed=false,saveTimer,saveQueue=Promise.resolve(),urls=[];
-function storageFailure(e){saveFailed=true;saveConflict||=e.name==='StorageConflictError';$('storage').textContent=`NOT SAVED · ${e.message||e.name||'Storage unavailable'}`;$('emergency').hidden=false;message(saveConflict?e.message:'Local saving failed (storage blocked, full, or unavailable). Keep this tab open and download a recovery ZIP immediately.',true);}
-function scheduleSave(){clearTimeout(saveTimer);$('storage').textContent=saveConflict?'NOT SAVED · Conflict with a newer saved version; download recovery ZIP.':'Saving local snapshot…';saveTimer=setTimeout(()=>saveNow(),350);}
+function storageFailure(e){saveFailed=true;saveConflict||=e.name==='StorageConflictError';$('emergency').hidden=false;const detail=saveConflict?e.message:`Local saving failed: ${e.message||e.name||'Storage unavailable'}. Keep this tab open and download a recovery ZIP.`;storageStatus('NOT SAVED',detail);message(detail,true);}
+function scheduleSave(){clearTimeout(saveTimer);storageStatus(saveConflict||saveFailed?'NOT SAVED':'Saving…',storageProblem);saveTimer=setTimeout(()=>saveNow(),350);}
 async function saveNow(){
   clearTimeout(saveTimer);
   const save=async()=>{
@@ -300,7 +325,7 @@ async function saveNow(){
     const record={id:recordKey(),review:clone(review),files,revisionId,completions:clone(completions),...(returned?{returned:clone(returned)}:{})},captured=stamp();
     try{
     const saved=await operations.putSaved(record,persistedRevision);
-      if(recordKey()===record.id){persistedRevision=saved.storageRevision;if(matchesStamp(captured)){dirty=false;saveFailed=false;$('emergency').hidden=true;$('storage').textContent='Saved locally';}}
+      if(recordKey()===record.id){persistedRevision=saved.storageRevision;if(matchesStamp(captured)){dirty=false;saveFailed=false;$('emergency').hidden=true;storageStatus('Saved locally');}}
     }catch(e){storageFailure(e);return false;}
     try{await refreshSaved();}catch(e){message(`Snapshot saved, but the saved-review list could not refresh: ${e.message}`,true);}
     return !dirty;
@@ -381,7 +406,7 @@ const appApi={
   commitCompletion:async(record,captured)=>{
     if(!matchesStamp(captured)||record.revision.id!==revisionId)throw new Error('The review changed. Finish the current revision again.');
     const saved=await operations.putSaved({id:recordKey(),review:clone(review),files,returned:clone(returned),revisionId,completions:mergeCompletions(completions,[record])},persistedRevision,record);
-    completions=saved.completions;persistedRevision=saved.storageRevision;dirty=false;saveFailed=false;saveConflict=false;recoveryStamp=null;$('emergency').hidden=true;$('storage').textContent='Saved locally · completion recorded.';invalidateExport();document.dispatchEvent(new Event('score-desk-completions'));
+    completions=saved.completions;persistedRevision=saved.storageRevision;dirty=false;saveFailed=false;saveConflict=false;recoveryStamp=null;$('emergency').hidden=true;storageStatus('Saved locally');invalidateExport();document.dispatchEvent(new Event('score-desk-completions'));
   },
   packageMaker:(...args)=>operations.makePackage(...args),zip:(...args)=>operations.zipFiles(...args),download:(...args)=>operations.download(...args)
 };

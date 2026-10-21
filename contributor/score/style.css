@@ -118,3 +118,43 @@ main,.returned-review main{grid-template-rows:auto minmax(0,1fr)}
   body.comments-open #commentsPanel{bottom:auto;max-height:100%;height:100%}
   main:has(#commentDock:not([hidden])) #commentsPanel{max-height:calc(100% - 84px)}
 }
+
+/* Ordinary status belongs to the header; score space is reserved only for
+   active notices and isolation, never for empty status rows. */
+header{justify-content:space-between}
+.desk-brand{flex:none;min-width:106px}.desk-brand .eyebrow{display:block}
+header #storage{display:block;max-width:none;margin-top:2px;font-size:11px;line-height:15px;white-space:nowrap;overflow:visible}
+header #storage.unsaved{color:#9a3023;font-weight:700}
+.primary-actions{justify-content:flex-end}
+#notices{align-items:center;max-height:25vh;overflow:auto;overscroll-behavior:contain}
+#notices #message,#storageProblem{white-space:normal;overflow:visible;overflow-wrap:anywhere;min-width:0;flex:1 1 200px}
+#notices #dismissMessage{flex:none;padding:1px 7px;font-size:17px;margin-left:auto}
+#notices #emergency{flex:none;padding:4px 8px;font-size:12px}
+.toolbar u{text-underline-offset:3px;text-decoration-thickness:1.5px}
+.toolbar #shortcutHelp{margin-left:auto}
+.toolbar .score-switch{margin-left:0;align-items:center}
+.focus-filter{flex:none;display:flex;justify-content:flex-end;align-items:center;gap:8px;padding:3px 10px;background:#f1f6ef;font-size:11px}
+.focus-filter #focusStatus{flex:none;min-width:0;overflow-wrap:anywhere}
+#doneNext kbd{display:block;font:10px "Segoe UI",sans-serif;opacity:.85;white-space:nowrap}
+#copyPrompt{margin-bottom:8px}
+@media(max-width:1000px){
+  .desk-brand .eyebrow{display:none}
+  .primary-actions button{font-size:11px;padding:6px 7px;white-space:nowrap}
+  .toolbar .score-switch{display:flex}
+}
+@media(max-width:650px){
+  header{flex-wrap:wrap;gap:4px;padding:4px 8px}
+  .desk-brand{display:flex;align-items:baseline;gap:10px;width:100%}
+  header #storage{margin:0}
+  .primary-actions{justify-content:flex-start;gap:4px;width:100%}
+  .primary-actions button{padding:5px 6px}
+  .toolbar{padding:4px 8px;gap:4px}
+  .toolbar #shortcutHelp{margin-left:0}
+}
+
+#handoffDownloads>.download{display:inline-block;font-weight:600;margin:0 0 8px}
+#handoffDownloads>.task-download{background:var(--accent);color:white;padding:10px 16px;border-radius:5px;text-decoration:none;text-align:center}
+#handoffDownloads>.task-download:hover{filter:brightness(.9)}
+#handoffDownloads>.task-download:focus-visible{outline:3px solid #e7ac39;outline-offset:3px}
+#handoffDownloads>details{padding:4px 0;margin:0 0 8px}
+#aiPrompt{height:140px;min-height:100px}
