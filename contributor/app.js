@@ -20,9 +20,9 @@ if (slug) {
     const score = lists.flat().find(item => item.slug === slug);
     if (!score) throw new Error('This work is not in the current score lists. You can still open a package below.');
     document.getElementById('selected-title').textContent = `${score.composer} — ${score.title}`;
-    status.textContent = score.draft ? 'Draft candidate; not human verified.' : score.verified_by
-      ? `Catalog verification credited to @${score.verified_by}. A new correction still requires review of its exact revision.`
-      : 'Awaiting human review. Opening files does not verify this work.';
+    status.textContent = score.draft ? 'Draft' : score.verified_by
+      ? `Proofread by @${score.verified_by}.`
+      : 'Ready for proofreading.';
     const links = document.getElementById('work-links');
     for (const [label, href] of workLinks(score, root)) {
       const link = document.createElement('a');

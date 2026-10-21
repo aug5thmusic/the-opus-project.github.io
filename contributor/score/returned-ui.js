@@ -21,7 +21,7 @@ export function installReturned(api,host){
   function attach(entry){if(working||api.status().busy)return;attachmentTarget={entry:clone(entry),stamp:api.capture().stamp};$('updatedRenderingFile').click();}
   $('updatedRenderingFile').onchange=guard(async e=>{
     const file=e.target.files[0],captured=attachmentTarget,target=captured?.entry;e.target.value='';attachmentTarget=null;if(!file||!target||working||api.status().busy)return;
-    working=true;let attachment;try{await api.lock(async()=>{api.message('Validating the selected PDF for the captured code revision…');const issued=await retained(target.taskId);attachment=await io.renderingAttachment(target,issued,file,api.inspectPdf);await io.retain(attachment);});await host.refresh();}
+    working=true;let attachment;try{await api.lock(async()=>{api.message('Checking the selected PDF…');const issued=await retained(target.taskId);attachment=await io.renderingAttachment(target,issued,file,api.inspectPdf);await io.retain(attachment);});await host.refresh();}
     finally{working=false;controls();}
     if(host.getShown()?.id===target.id&&api.matches(captured.stamp))await open(target,attachment);else api.message('Rendering retained for the earlier selected revision. The current workspace was not changed.');
   });
@@ -31,7 +31,7 @@ export function installReturned(api,host){
     if(!round){for(const url of images)URL.revokeObjectURL(url);images=[];panelId=null;$('renderedLabel').textContent='Rendered score';return;}
     if(panelId!==round.id){position=0;panelId=round.id;$('roundStatus').textContent='';}$('roundVersion').value=scene.comparison?'previous':'current';$('renderedLabel').textContent=scene.comparison?'Previous rendering · comparison only':'Returned rendering · current review';
     $('roundIdentity').textContent=`Reviewing ${scene.files.ly.name} · ${scene.files.rendered.name} · response ${round.responseId.slice(0,8)} · ${round.attachmentId?'attached version '+round.attachmentId.slice(0,8):'received revision'}`;
-    $('roundProgress').textContent=`${round.reported.filter(f=>f.decision).length} of ${round.reported.length} reported findings reviewed. This is not whole-score verification.`;
+    $('roundProgress').textContent=`${round.reported.filter(f=>f.decision).length} of ${round.reported.length} reported findings reviewed.`;
     position=Math.max(0,Math.min(round.reported.length-1,position));const f=round.reported[position];$('reportedFinding').hidden=!f;if(!f){controls();return;}
     $('roundFindingTitle').textContent=`Finding ${position+1} / ${round.reported.length} · #${f.number}`;$('roundOriginal').textContent=f.comment;$('roundAgent').textContent=f.agent.explanation;$('roundLocation').textContent=f.agent.codeLocation?`Code location: ${f.agent.codeLocation}`:'';
     const annotation=scene.review.findings.find(m=>m.id===f.associationId);
@@ -51,7 +51,7 @@ export function installReturned(api,host){
   async function decide(state){
     if(working||decisionBusy||api.status().busy||api.capture().comparison)return;const s=api.capture(),f=s.returned?.reported[position];if(!f)return;
     if(state!=='resolved'&&!f.explanation.trim())throw new Error('Add your explanation before requesting another correction or source clarification.');
-    decisionBusy=true;controls();try{await api.lock(()=>api.commitDecision(round=>{const item=round.reported.find(item=>item.id===f.id);item.state=state;item.decision={state,explanation:item.explanation,at:new Date().toISOString(),reviewed:{snapshotId:round.contentSnapshotId,codeSha256:round.codeSha256,renderSha256:round.renderSha256}};}));$('roundStatus').textContent='Human decision saved for this exact code and rendering. Earlier decisions retained.';await render();}
+    decisionBusy=true;controls();try{await api.lock(()=>api.commitDecision(round=>{const item=round.reported.find(item=>item.id===f.id);item.state=state;item.decision={state,explanation:item.explanation,at:new Date().toISOString(),reviewed:{snapshotId:round.contentSnapshotId,codeSha256:round.codeSha256,renderSha256:round.renderSha256}};}));$('roundStatus').textContent='Human decision saved.';await render();}
     finally{decisionBusy=false;controls();}
   }
   $('looksCorrect').onclick=guard(()=>decide('resolved'));$('stillCorrection').onclick=guard(()=>decide('open'));$('needsClarification').onclick=guard(()=>decide('needs_source_clarification'));

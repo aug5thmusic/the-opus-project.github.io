@@ -45,9 +45,9 @@ export async function prepareSharedReport(scene,options={}){
   const review=validateReview(scene.review,expected);
   // Retain original timestamps after validating the geometry and file identities.
   review.updatedAt=scene.review.updatedAt;
-  if(!review.findings.length&&!clean)fail('Add at least one finding, or explicitly declare no errors found in the reviewed scope.');
+  if(!review.findings.length&&!clean)fail('Add findings, or select “I found no errors.”');
   if(clean&&review.findings.length)fail('A clean review cannot also contain findings. Submit the findings instead.');
-  if(!scope||!['report','partial','whole'].includes(scope.kind)||typeof scope.description!=='string'||!scope.description.trim())fail('Describe the scope you actually reviewed.');
+  if(!scope||!['report','partial','whole'].includes(scope.kind)||typeof scope.description!=='string'||!scope.description.trim())fail('Enter the pages or passages you checked.');
   if(clean&&scope.kind==='report')fail('Choose a partial or whole-work review before making a clean declaration.');
   for(const finding of review.findings)if(!['transcription','source_error','clarification'].includes(kinds[finding.id]??'transcription'))fail('Choose an encoding error, suspected source error, or clarification for each finding.');
   const result={requestId,review,scope:clone(scope),clean:clean===true,displayName:String(displayName).slice(0,200),kinds:clone(kinds)};

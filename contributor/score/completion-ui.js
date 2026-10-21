@@ -18,9 +18,9 @@ export function installCompletion(api){
     if(api.status().busy||!api.capture().review)return;clear();attempt=null;$('finishForm').reset();try{$('finishReviewer').value=localStorage.getItem('score-desk-reviewer')??'';}catch{}
     const s=api.capture(),findings=completionFindings(s.review,s.returned);$('finishRevision').textContent=`Current review: ${s.files.ly.name} · ${s.files.rendered.name}${s.returned?' · response '+s.returned.responseId:''}`;
     $('finishOverview').textContent=`${findings.length} findings · ${findings.filter(f=>f.state!=='resolved').length} unresolved · ${findings.filter(f=>f.kind==='reported'&&!f.decision).length} reported findings without a decision. All are included.`;
-    status('Choose what you reviewed. This declaration does not resolve findings, approve a response or verify the score.');controls();$('finishDialog').showModal();
+    status('Choose what you reviewed.');controls();$('finishDialog').showModal();
   }
-  function cancel(){if(job?.phase==='preparing'){job.cancelled=true;status('Cancelling preparation. Your work is retained; editing resumes when preparation stops.');}else if(job)status('Saving the completion. Please wait for this atomic operation to finish.');else $('finishDialog').close();}
+  function cancel(){if(job?.phase==='preparing'){job.cancelled=true;status('Cancelling preparation. Your work is retained; editing resumes when preparation stops.');}else if(job)status('Saving your review. Please wait.');else $('finishDialog').close();}
   $('finishReview').onclick=open;$('closeFinish').onclick=cancel;$('cancelFinish').onclick=cancel;
   $('prepareGithub').onclick=()=>{if(!published||!api.matches(published))return;$('githubPrompt').hidden=false;$('prepareGithub').setAttribute('aria-expanded','true');};
   $('copyGithub').onclick=async()=>{
@@ -50,7 +50,7 @@ export function installCompletion(api){
       $('finishSummary').textContent=summary;$('finishDownloads').append(fragment);published=scene.stamp;
       $('githubInstructions').value=instructions;$('githubCopyStatus').textContent='';$('githubHandoff').hidden=false;$('finishForm').hidden=true;$('finishIntro').hidden=true;$('finishOverview').hidden=true;$('finishTitle').textContent='Review saved locally';$('finishDialog').scrollTop=0;
       try{if(fields.reviewer.trim())localStorage.setItem('score-desk-reviewer',fields.reviewer.trim());else localStorage.removeItem('score-desk-reviewer');}catch{}
-      status(`Package ready · ${{corrections:'Corrections reviewed',entire:'Entire work reviewed',partial:'Partial review'}[record.scope]} · ${record.totals.unresolved} unresolved · ${record.totals.missingDecisions} missing decisions. Scope declaration only.`);history();
+      status(`Package ready · ${{corrections:'Corrections reviewed',entire:'Entire work reviewed',partial:'Partial review'}[record.scope]} · ${record.totals.unresolved} unresolved · ${record.totals.missingDecisions} missing decisions.`);history();
     });}catch(error){clear();status(`Not finished: ${error.message} Your review is retained. Retry when ready.`);api.message($('finishStatus').textContent,true);if(thisJob.cancelled)attempt=null;}
     finally{if(job===thisJob)job=null;controls();}
   };

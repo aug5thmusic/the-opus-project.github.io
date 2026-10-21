@@ -25,7 +25,13 @@ export function installHandoff(api){
   $('handoffDialog').addEventListener('cancel',e=>{if(job){e.preventDefault();status('Preparing files. Editing stays blocked until this operation finishes.');}});
   // A closed dialog invalidates a running job, even if closed programmatically.
   let generation=0;$('handoffDialog').addEventListener('close',()=>{generation++;});
-  async function history(){const entries=await retainedList(),names=new Map(entries.filter(e=>e.kind==='task').map(e=>[e.id,e.review.files.ly.name]));$('handoffHistory').replaceChildren(new Option('Choose a retained task, response, or prior review…',''));for(const e of entries){const name=e.kind==='task'?e.review.files.ly.name:e.kind==='review-backup'?e.review.files.rendered.name:names.get(e.taskId)??'AI response',kind=e.kind==='response'?(e.parentRevisionId?'human decision':e.renderingStatus==='pending'?'response · rendering pending':'response · PDF supplied'):e.kind;$('handoffHistory').add(new Option(`${kind} · ${name} · ${new Date(e.createdAt).toLocaleString()}`,e.id));}}
+  async function history(){
+    const entries=await retainedList(),names=new Map(entries.filter(e=>e.kind==='task').map(e=>[e.id,e.review.files.ly.name]));
+    $('handoffHistory').hidden=entries.length===0;$('inspectHandoff').hidden=entries.length===0;$('handoffEmpty').hidden=entries.length!==0;
+    $('handoffEmpty').textContent='No saved tasks, responses or reviews yet.';
+    $('handoffHistory').replaceChildren(new Option('Choose a saved task, response, or review…',''));
+    for(const e of entries){const name=e.kind==='task'?e.review.files.ly.name:e.kind==='review-backup'?e.review.files.rendered.name:names.get(e.taskId)??'AI response',kind=e.kind==='response'?(e.parentRevisionId?'human decision':e.renderingStatus==='pending'?'response · rendering pending':'response · PDF supplied'):e.kind;$('handoffHistory').add(new Option(`${kind} · ${name} · ${new Date(e.createdAt).toLocaleString()}`,e.id));}
+  }
   $('openPackage').onclick=()=>$('packageFile').click();
   $('packageFile').onchange=guarded(async e=>{const file=e.target.files[0];e.target.value='';if(!file||api.status().busy)return;const captured=api.capture().stamp;status('Checking package files…');
     const parsed=await api.lock(()=>io.readPackage(file,api.inspectPdf));if(!api.matches(captured))throw new Error('The review changed while checking this package. Open it again when ready.');
@@ -67,12 +73,12 @@ export function installHandoff(api){
   });
   function renderResponse(parsed,entry){
     const {issued,response,payloads}=parsed,root=$('responsePreview');root.replaceChildren();
-    const p=document.createElement('p');p.className='response-banner';p.textContent=response.code.status==='changed'&&response.rendering.status==='pending'?'Code changes received — updated rendering pending.':response.rendering.status==='supplied'?'New rendering supplied — producer-declared relationship; human review required.':'No code changes received — findings still require human review.';root.append(p);
-    const note=document.createElement('p');note.textContent=`Response to ${issued.review.files.ly.name} · task ${issued.id.slice(0,8)}. Previous rendering and original markings remain on their original snapshot. Current workspace is unchanged. No score verification is claimed.`;root.append(note);
-    downloadLink(issued.files.rendered.blob,'previous-rendering.pdf','Open/download previous rendering (original finding geometry)',root);
-    downloadLink(issued.files.source.blob,'original-printed-source.pdf','Original printed source (pagination is independent)',root);
+    const p=document.createElement('p');p.className='response-banner';p.textContent=response.code.status==='changed'&&response.rendering.status==='pending'?'Code changes received — updated rendering pending.':response.rendering.status==='supplied'?'Updated rendering ready to review.':'No code changes received.';root.append(p);
+    const note=document.createElement('p');note.textContent=`Response to ${issued.review.files.ly.name} · task ${issued.id.slice(0,8)}. Original marks are shown on the previous rendering.`;root.append(note);
+    downloadLink(issued.files.rendered.blob,'previous-rendering.pdf','Previous rendering with original findings',root);
+    downloadLink(issued.files.source.blob,'original-printed-source.pdf','Original printed source',root);
     downloadLink(response.code.status==='changed'?payloads.get(response.code.path):issued.files.ly.blob,'proposed.ly',response.code.status==='changed'?'Proposed LilyPond — rendering '+response.rendering.status:'Unchanged baseline LilyPond',root);
-    if(response.rendering.status==='supplied')downloadLink(payloads.get(response.rendering.path),'proposed-rendering.pdf','New PDF — declared by '+response.rendering.producer,root);
+    if(response.rendering.status==='supplied')downloadLink(payloads.get(response.rendering.path),'proposed-rendering.pdf','Updated PDF from '+response.rendering.producer,root);
     if(entry){const actions=document.createElement('div'),open=document.createElement('button'),attach=document.createElement('button');open.id='reviewReturned';open.className='primary';open.textContent='Review this returned revision';open.dataset.handoffAction='';open.onclick=guarded(()=>returnedUI.open(entry));attach.id='attachUpdated';attach.textContent='Attach updated rendering';attach.dataset.handoffAction='';attach.onclick=()=>returnedUI.attach(entry);actions.append(open,attach);root.append(actions);}
     for(const f of taskFindings(issued)){const result=response.results.find(r=>r.id===f.id),card=document.createElement('article');card.className='response-finding';const title=document.createElement('h3');title.textContent=`#${f.number} · ${f.page==null?'current passage not located':'previous rendered page '+f.page}`;card.append(title);
       for(const text of [`Original finding: ${f.comment}`,`Agent: ${result.status.replaceAll('_',' ')} — ${result.explanation}`,result.codeLocation?`Code location: ${result.codeLocation}`:''])if(text){const p=document.createElement('p');p.textContent=text;card.append(p);}
@@ -82,7 +88,7 @@ export function installHandoff(api){
         approve.onclick=guarded(()=>resolveFinding(parsed,entry,f.id));card.append(approve);}
       root.append(card);
     }
-    const details=document.createElement('details'),summary=document.createElement('summary'),pre=document.createElement('pre');summary.textContent='Task, baseline, rendering provenance and response metadata';pre.textContent=JSON.stringify(response,null,2);details.append(summary,pre);root.append(details);
+    const details=document.createElement('details'),summary=document.createElement('summary'),pre=document.createElement('pre');summary.textContent='Response details';pre.textContent=JSON.stringify(response,null,2);details.append(summary,pre);root.append(details);
     $('handoffDialog').scrollTop=0;
   }
   async function resolveFinding(parsed,entry,id){
@@ -92,13 +98,13 @@ export function installHandoff(api){
     job=true;resolving=true;resolutionControls(parsed.response);$('closeHandoff').disabled=true;$('responsePreview').setAttribute('aria-busy','true');
     try{await api.lock(async()=>{
       const next=clone(shown);next.id=crypto.randomUUID();next.createdAt=new Date().toISOString();next.parentRevisionId=shown.id;next.findings.find(item=>item.id===id).state='resolved';
-      status('Saving human review decision…');await io.retain(next);shown=next;clear();renderResponse(parsed,next);await history();status('Explicit human decision retained as a new revision. No overall verification claimed.');
+      status('Saving human review decision…');await io.retain(next);shown=next;clear();renderResponse(parsed,next);await history();status('Human decision saved.');
     });}
     finally{job=false;resolving=false;resolutionControls(parsed.response);$('closeHandoff').disabled=false;$('responsePreview').setAttribute('aria-busy','false');}
   }
   $('acceptResponse').onclick=guarded(async()=>{
     if(!pending||job)return;job=true;$('acceptResponse').disabled=true;$('closeHandoff').disabled=true;
-    try{const entry=await api.lock(()=>io.acceptResponse(pending));shown=entry;$('acceptResponse').hidden=true;clear();renderResponse(pending,entry);await history();status('Accepted as a new retained revision. Original review and newer local work remain unchanged.');}
+    try{const entry=await api.lock(()=>io.acceptResponse(pending));shown=entry;$('acceptResponse').hidden=true;clear();renderResponse(pending,entry);await history();status('Accepted and saved for review.');}
     finally{job=false;$('acceptResponse').disabled=false;$('closeHandoff').disabled=false;}
   });
   $('inspectHandoff').onclick=guarded(async()=>{const entry=await retained($('handoffHistory').value);if(!entry)return;clear();$('responsePreview').replaceChildren();$('acceptResponse').hidden=true;$('promptFallback').hidden=true;show(entry.kind==='task');
@@ -112,6 +118,6 @@ export function installHandoff(api){
   document.addEventListener('score-desk-change',()=>{if(issuedStamp&&!api.matches(issuedStamp)){clear();issuedStamp=null;prompt='';$('aiPrompt').value='';$('promptFallback').hidden=true;status('Review changed. The issued task remains in history; export a new task for the latest findings.');}});
   const returnedUI=installReturned(api,{getShown:()=>shown,close,refresh:history});
   $('exportFollowup').onclick=()=>$('exportTask').click();
-  history().catch(e=>status('Handoff history is unavailable: '+e.message,true));
+  history().catch(e=>{$('handoffEmpty').textContent='Saved history could not be loaded.';status('Handoff history is unavailable: '+e.message,true);});
   return {io,history,returnedUI};
 }

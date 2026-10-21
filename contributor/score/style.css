@@ -191,11 +191,12 @@ button.icon-close svg{display:block;width:16px;height:16px;fill:none;stroke:curr
 .shared-session,.shared-work-picker,.shared-inline-actions,.shared-retry{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .shared-session{padding:10px 0;border-block:1px solid var(--line)}
 .shared-session span{flex:1}
-.shared-work-picker label{flex:1;min-width:180px;display:flex;flex-direction:column;gap:6px;margin:10px 0}
+.shared-work-picker{align-items:flex-end;margin:10px 0}
+.shared-work-picker label{flex:1;min-width:180px;display:flex;flex-direction:column;gap:6px;margin:0}
 #sharedWork{width:100%;min-width:0}
-#sharedStatus{height:48px;max-height:48px;overflow-y:auto;margin:8px 0;font-size:13px;line-height:1.6}
+#sharedStatus{min-height:48px;margin:8px 0;font-size:13px;line-height:1.6;overflow-wrap:anywhere}
 #sharedStatus[data-error=true],.shared-warning{color:#874411;background:#fff0df;padding:8px;border-radius:4px}
-.shared-paths{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin:14px 0}
+.shared-paths{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin:14px 0}
 .shared-paths button{text-align:left;padding:12px}
 .shared-paths b,.shared-paths span{display:block}
 .shared-paths b{font-size:14px;margin-bottom:6px}
@@ -236,8 +237,6 @@ button.icon-close svg{display:block;width:16px;height:16px;fill:none;stroke:curr
 .shared-proposal-state{font-size:12px;color:#536b60}
 #sharedHandoffText{font-size:12px;line-height:1.5}
 .shared-local-tools{display:none}
-@media(max-width:1000px){
-  .shared-work-selected .primary-actions #openPackage,.shared-work-selected .primary-actions #exportTask,.shared-work-selected .primary-actions #finishReview{display:none}
-  .shared-work-selected .shared-local-tools{display:flex;gap:8px;flex-wrap:wrap;padding:8px 12px}
-}
+.shared-work-selected .primary-actions #openPackage,.shared-work-selected .primary-actions #exportTask,.shared-work-selected .primary-actions #finishReview{display:none}
+.shared-work-selected .shared-local-tools{display:flex;gap:8px;flex-wrap:wrap;padding:8px 12px}
 @media(max-width:650px){.shared-paths{grid-template-columns:1fr}#sharedDialog{padding:16px}#sharedDialog .dialog-head h2{font-size:22px}}

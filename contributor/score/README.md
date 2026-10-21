@@ -6,17 +6,15 @@ submissions require the owner-configured [project service](../../service/README.
 and GitHub sign-in. The checked-in service configuration is inactive; the UI
 does not claim local saves were submitted.
 
-Choose **Project contributions** for four separate ways to help:
+Choose **Project contributions** for three ways to help:
 
-- **Report an error**: type or highlight one finding, then **Submit findings**.
-  A durable receipt means you can leave; no full review or PR is required.
-- **Review this score**: declare a partial or whole-work scope and either submit
-  findings or explicitly declare **No errors found in the reviewed scope**.
-- **Help fix reported errors**: **Get correction package**, attach the ZIP to
-  your chosen AI, paste its instructions, then **Return AI response**. Someone
-  else can judge the music.
-- **Review proposed fixes**: open a proposal beside the source and record a
-  decision for any subset of its findings. Unchecked items remain available.
+- **Proofread**: compare the score with the printed source and mark or describe
+  errors, then **Submit findings**. You can also record which pages you checked,
+  including when you found no errors.
+- **Send corrections to AI**: **Get correction package**, attach the ZIP to
+  your AI, paste its instructions, then **Return AI response**.
+- **Check AI corrections**: compare the AI’s changes with the original and
+  record a decision for each finding you checked.
 
 The service supplies the exact files and includes everyone's outstanding
 findings in a correction task. If the source library cannot be reached, select

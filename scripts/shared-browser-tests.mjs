@@ -50,7 +50,7 @@ export async function runShared({browser,serve,evidence,root}){
     page.on('console',message=>{if(message.type()==='error')log.push('CONSOLE '+name+' '+message.text());});
     await page.goto(staticServer.url+'contributor/score/?piece='+slug+query);
     await page.waitForFunction(()=>document.body.dataset.ready==='true'&&!document.querySelector('#sharedAvailable')?.hidden);
-    if(!await page.locator('#sharedDialog').isVisible())await page.locator('#sharedProject').click();
+    await page.locator('#sharedDialog').waitFor({state:'visible'});
     await page.locator('#sharedDevLogin').fill(name);await page.locator('#sharedDevForm button').click();
     await page.waitForFunction(name=>document.querySelector('#sharedIdentity').textContent.includes('@'+name),name);
     actors[name]=page;return page;
@@ -59,6 +59,7 @@ export async function runShared({browser,serve,evidence,root}){
   async function textFinding(page,text){await page.locator('#newFinding').click();await page.locator('#comment').fill(text);await page.locator('#saveFinding').click();await page.waitForFunction(()=>document.querySelector('#storage').textContent==='Saved locally');}
   async function sendReport(page){const before=new URL(page.url()).searchParams.get('report');await page.locator('#sharedSendReport').click();await page.waitForFunction(before=>document.querySelector('#sharedReportForm').hidden&&new URL(location.href).searchParams.get('report')!==before,before);return new URL(page.url()).searchParams.get('report');}
   async function submit(page){await page.locator('#sharedSubmit').click();return sendReport(page);}
+  async function findingsForm(page){if(await page.locator('#sharedDialog').isVisible())await page.locator('#sharedClose').click();await page.locator('#sharedSubmit').click();}
   async function getTask(page){
     if(!await page.locator('#sharedDialog').isVisible())await page.locator('#sharedProject').click();
     await page.locator('#sharedFixPath').click();await page.locator('#sharedGetTask').click();
@@ -79,7 +80,7 @@ export async function runShared({browser,serve,evidence,root}){
     const aliceId=await submit(alice),aliceReport=await api('/api/reports/'+aliceId);
     check(aliceReport.findings.length===2&&aliceReport.findings[0].annotation.strokes.length===0&&aliceReport.findings[1].annotation.strokes.length>0,'Alice submits text-only and brush findings through actual UI');
     check(aliceReport.author.login==='alice'&&aliceReport.reviewed.files.ly.sha256===sha(lilypond),'receipt preserves authenticated author and exact reviewed bytes');
-    check((await alice.locator('#sharedReceipt').innerText()).includes('You can leave now'),'ordinary report has durable receipt and independent completion');
+    check((await alice.locator('#sharedReceipt h3').innerText())==='Submitted to the project','ordinary report has durable receipt and independent completion');
     const eric=await actor('eric');await openScore(eric);const quickStart=Date.now();
     await textFinding(eric,'SIMULATED another reporter observation.');const ericId=await submit(eric);
     check(Date.now()-quickStart<10000,'one-finding report completes within ten seconds without AI or PR');
@@ -113,19 +114,47 @@ export async function runShared({browser,serve,evidence,root}){
     check(decided.findings.filter(f=>f.decision).length===1&&decided.findings[0].decision.author.login==='david','David reviews one finding and preserves attribution; unchecked findings remain');
     check((await state()).findings.every(f=>f.state!=='resolved'),'approval alone resolves no finding in the published score');
     // Clean declarations are independently useful and never close other reports.
-    const eve=await actor('eve');await eve.locator('#sharedReviewPath').click();
+    const eve=await actor('eve');
+    check(JSON.stringify(await eve.locator('.shared-paths b').allTextContents())===JSON.stringify(['Proofread','Send corrections to AI','Check AI corrections']),'three clear actions share one proofreading entry');
+    for(const width of [1440,724,533]){
+      await eve.setViewportSize({width,height:1000});
+      const alignment=await eve.evaluate(()=>{const a=document.querySelector('#sharedWork').getBoundingClientRect(),b=document.querySelector('#sharedRefresh').getBoundingClientRect();return Math.abs((a.top+a.bottom-b.top-b.bottom)/2);});
+      check(alignment<2,`work dropdown and refresh button align at ${width}px`);
+      if(width!==724)await eve.screenshot({path:resolve(evidence,`shared-menu-${width}.png`),fullPage:true});
+    }
+    await eve.setViewportSize({width:1440,height:1000});await openScore(eve);await findingsForm(eve);
+    check(await eve.locator('input[name=sharedScope][value=report]').isChecked()&&!await eve.locator('#sharedCleanLabel').isVisible(),'reporting errors needs no coverage declaration');
     await eve.locator('input[name=sharedScope][value=partial]').check();await eve.locator('#sharedScopeNote').fill('SIMULATED partial review: first system only.');
     await eve.locator('#sharedDisplayName').fill('SIMULATED optional typed name');
     await eve.reload();await eve.waitForFunction(()=>document.body.dataset.ready==='true'&&!document.querySelector('#sharedAvailable')?.hidden);
-    if(!await eve.locator('#sharedDialog').isVisible())await eve.locator('#sharedProject').click();
+    await eve.locator('#sharedDialog').waitFor({state:'visible'});
     await eve.locator('#sharedDevLogin').fill('eve');await eve.locator('#sharedDevForm button').click();await eve.waitForFunction(()=>document.querySelector('#sharedIdentity').textContent.includes('@eve'));
-    await eve.locator('#sharedReviewPath').click();await eve.waitForFunction(()=>document.querySelector('#sharedScopeNote').value==='SIMULATED partial review: first system only.');
+    await openScore(eve);await findingsForm(eve);await eve.waitForFunction(()=>document.querySelector('#sharedScopeNote').value==='SIMULATED partial review: first system only.');
     check(await eve.locator('input[name=sharedScope][value=partial]').isChecked()&&(await eve.locator('#sharedDisplayName').inputValue())==='SIMULATED optional typed name'&&!await eve.locator('#sharedClean').isChecked(),'offline review draft restores scope and typed name after reload without implying clean coverage');
+    const draftPrefix=`report:${slug}:${(await state()).current.snapshotId}:`;
+    await eve.evaluate(async({serviceURL,draftPrefix})=>{
+      const {SharedClient}=await import('./shared-client.js'),client=new SharedClient(serviceURL);
+      const draft=await client.draft(draftPrefix+'report');
+      await client.saveDraft(draftPrefix+'review',{...draft,mode:'review',scopeNote:'SIMULATED older proofreading draft.'});
+      await client.clearDraft(draftPrefix+'report');
+    },{serviceURL,draftPrefix});
+    await findingsForm(eve);await eve.waitForFunction(()=>document.querySelector('#sharedScopeNote').value==='SIMULATED older proofreading draft.');
+    await eve.locator('#sharedDisplayName').fill('SIMULATED restored older draft');
+    await eve.reload();await eve.locator('#sharedDialog').waitFor({state:'visible'});
+    await eve.locator('#sharedDevLogin').fill('eve');await eve.locator('#sharedDevForm button').click();await eve.waitForFunction(()=>document.querySelector('#sharedIdentity').textContent.includes('@eve'));
+    await openScore(eve);await findingsForm(eve);
+    await eve.waitForFunction(()=>document.querySelector('#sharedDisplayName').value==='SIMULATED restored older draft');
+    check((await eve.locator('#sharedScopeNote').inputValue())==='SIMULATED older proofreading draft.'&&(await eve.locator('#sharedDisplayName').inputValue())==='SIMULATED restored older draft','older proofreading form survives the combined flow and another reload');
     const reportCount=(await state()).reports.length;
-    await eve.locator('#sharedSendReport').click();await eve.waitForFunction(()=>document.querySelector('#sharedStatus').textContent.includes('explicitly declare'));
+    await eve.locator('#sharedSendReport').click();await eve.waitForFunction(()=>document.querySelector('#sharedStatus').textContent.includes('I found no errors'));
+    await eve.setViewportSize({width:533,height:700});
+    check(await eve.locator('#sharedStatus').evaluate(element=>element.scrollHeight<=element.clientHeight&&element.scrollWidth<=element.clientWidth),'form guidance has no nested scrollbars at narrow width');
+    await eve.screenshot({path:resolve(evidence,'shared-form-narrow.png'),fullPage:true});
+    await eve.setViewportSize({width:1440,height:1000});
     check((await state()).reports.length===reportCount,'zero findings without an explicit clean declaration cannot submit');
     await eve.locator('#sharedClean').check();await sendReport(eve);
-    await eve.locator('#sharedReviewPath').click();await eve.locator('input[name=sharedScope][value=whole]').check();await eve.locator('#sharedScopeNote').fill('SIMULATED whole-work review: every fixture page and system.');await eve.locator('#sharedClean').check();await sendReport(eve);
+    check(await eve.evaluate(async({serviceURL,draftPrefix})=>{const {SharedClient}=await import('./shared-client.js'),client=new SharedClient(serviceURL);return !await client.draft(draftPrefix+'report')&&!await client.draft(draftPrefix+'review');},{serviceURL,draftPrefix}),'successful submission clears both copies of the migrated draft');
+    await findingsForm(eve);await eve.locator('input[name=sharedScope][value=whole]').check();await eve.locator('#sharedScopeNote').fill('SIMULATED whole-work review: every fixture page and system.');await eve.locator('#sharedClean').check();await sendReport(eve);
     const cleanState=await state();check(cleanState.reports.filter(r=>r.clean).length===2&&cleanState.findings.length===4,'partial and whole clean reviews leave other people findings intact');
     check(cleanState.current.files.ly.sha256===sha(lilypond)&&cleanState.work.verified_by===null,'review-only submissions change neither LilyPond nor verification');
     // Normal authenticated users cannot mutate reports or claim application/verification.

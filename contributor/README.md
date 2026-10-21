@@ -1,6 +1,8 @@
 # Contributor workspace
 
-Score Desk has four independently complete shared contributions: report findings, submit a scoped review, supply an AI response, and review selected proposed fixes. The existing brush editor, local reviews, recovery packages and completed-review exports remain available. Existing Encodings search is outside this change.
+Score Desk offers three choices: **Proofread**, **Send corrections to AI**, and **Check AI corrections**. Proofread lets you mark or describe errors. You can also record which pages you checked, including when you found no errors. Send a correction package to your AI and return its response, or check the AI’s changes against the original score.
+
+The brush editor, local reviews, recovery packages and completed-review exports remain available. Existing Encodings search is outside this change.
 
 ## Build and preview
 

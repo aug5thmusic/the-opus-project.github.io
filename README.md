@@ -34,12 +34,11 @@ An attempt found to be wrong can be marked `withdrawn` in metadata; it remains i
 
 Proofreading does not require a clone or LilyPond. Open a work's **Compare PDFs** link in the catalog, or choose a draft from the [proofreading page](proofread.html), to see the original printed PDF beside the rendered transcription. An alternate high-resolution scan is linked when available. Report findings in the on-page discussion. A maintainer records human verification only after a full comparison of a specific revision. GitHub sign-in is required to post; reading the scores is open.
 
-[Score Desk](contributor/index.html) offers four separate ways to help. You can finish any one and leave:
+[Score Desk](contributor/index.html) offers three ways to help:
 
-- **Report an error:** type one finding or highlight a passage, then **Submit findings**. Keep the shared receipt; no full review, AI task or PR is required.
-- **Review this score:** declare the part you checked, submit findings, or explicitly declare **No errors found in the reviewed scope**. A partial review is useful. An empty list alone means nothing about correctness.
-- **Help fix reported errors:** download a correction package containing the shared outstanding findings, attach its ZIP to your chosen AI, paste the supplied instructions, then **Return AI response**. Someone else can review it.
-- **Review proposed fixes:** compare a returned proposal with the printed source and check any subset of findings. Your decisions and their exact candidate remain available to others.
+- **Proofread:** compare the score with the printed source and mark or describe errors, then **Submit findings**. You can also record which pages you checked, including when you found no errors.
+- **Send corrections to AI:** download the correction package, attach its ZIP to your AI, paste the instructions, then **Return AI response**.
+- **Check AI corrections:** compare the AI’s changes with the original and record a decision for each finding you checked.
 
 The static frontend still runs on GitHub Pages. Shared submissions use the optional [project service](service/README.md), with durable SQLite storage and GitHub sign-in; reading and local drafting need no account. **Shared service is not activated by this code change.** Until the owner configures it, the interface says so and local reviews/recovery exports remain available. No contributor runs the service, provides an access token, or needs Git. Existing Encodings search remains outside this workflow.
 

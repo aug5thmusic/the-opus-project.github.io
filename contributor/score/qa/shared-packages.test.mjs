@@ -27,7 +27,7 @@ assert.equal(sourceReport.clean,false);assert.equal(sourceReport.review.findings
 assert.ok(!Object.hasOwn(sourceReport,'package'),'ordinary reporting sends small annotations; service assembles immutable recovery from known assets');
 assert.ok((await prepareSharedReport({review,files},{scope:{kind:'report',description:'Page 1 only'},includePackage:true})).package,'explicit recovery transfer remains supported');
 const clean=clone(review);clean.findings=[];clean.nextNumber=1;
-await assert.rejects(()=>prepareSharedReport({review:clean,files},{scope:{kind:'partial',description:'Page 1 only'}}),/explicitly declare/);
+await assert.rejects(()=>prepareSharedReport({review:clean,files},{scope:{kind:'partial',description:'Page 1 only'}}),/I found no errors/);
 await assert.rejects(()=>prepareSharedReport({review,files},{clean:true,scope:{kind:'whole',description:'Whole work'}}),/cannot also contain/);
 for(const kind of ['partial','whole']){
   const report=await prepareSharedReport({review:clean,files},{clean:true,scope:{kind,description:kind+' scope'}});

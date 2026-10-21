@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="description" content="Report one error, review a score, supply an AI response, or check a proposed fix. Each contribution can stand alone.">
+  <meta name="description" content="Proofread, send corrections to AI, or check AI corrections in Score Desk.">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; connect-src 'self'; style-src 'self'; img-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
   <title>Score Desk — The OPUS Project</title>
   <link rel="stylesheet" href="../styles.css">
@@ -14,33 +14,32 @@
   <header class="site-header"><div class="header-inner"><a class="wordmark" href="../">The <span>OPUS</span> Project</a><nav aria-label="Primary navigation"><a href="../#scores">Scores</a><a href="../proofread.html">Choose a draft</a><a href="../contribute.html">Contribute</a><a href="./" aria-current="page">Score Desk</a></nav></div></header>
   <main>
     <section class="intro">
-      <p class="eyebrow">REPORT · REVIEW · HELP FIX · CHECK FIXES</p>
-      <h1>One useful contribution is enough.</h1>
-      <p>Compare a score, report one error, help an AI prepare corrections, or check someone else’s proposed fix. Different people can take each step, on different devices.</p>
+      <p class="eyebrow">PROOFREAD · CORRECT · CHECK</p>
+      <h1>Help improve a score.</h1>
+      <p>Proofread, send corrections to your AI, or check the AI’s changes.</p>
       <p class="actions"><a class="primary-link" href="score/" data-score-desk>Open Score Desk</a><a href="../proofread.html">Choose a project score</a></p>
-      <p class="privacy">Drafts are saved on this device. Shared reports and proposals are saved by the project service only after you submit and receive a receipt. Production sharing needs the project owner to activate that service.</p>
+      <p class="privacy">Drafts are saved on this device. Shared submissions are not yet active; the project owner must enable them.</p>
     </section>
 
     <section class="panel" id="selected-work" hidden aria-labelledby="selected-title">
       <div class="panel-heading"><h2 id="selected-title">Selected work</h2></div>
-      <div class="panel-body"><p id="work-status" role="status"></p><div id="work-links" class="actions"></div><p><a class="primary-link" href="score/" data-score-desk>Open this work’s shared page</a></p><p>When sharing is activated, Score Desk assembles the exact printed source, LilyPond and rendering. If the source library is unavailable, it asks for only the original printed PDF and checks that file automatically.</p></div>
+      <div class="panel-body"><p id="work-status" role="status"></p><div id="work-links" class="actions"></div><p><a class="primary-link" href="score/" data-score-desk>Open this work in Score Desk</a></p><p>Score Desk gathers the score files for you. If the library is unavailable, it asks you to select the original PDF.</p></div>
     </section>
 
     <div class="entry-grid">
-      <section class="panel"><div class="panel-heading"><h2>Report an error</h2></div><div class="panel-body"><p>Open a work. Choose <strong>New finding</strong> and type a note, or draw a highlight. Select <strong>Submit findings</strong> and sign in. One finding is enough.</p><p>The receipt means your report is saved in the project. You can leave; no full-score review, AI work or pull request is required.</p></div></section>
-      <section class="panel"><div class="panel-heading"><h2>Review this score</h2></div><div class="panel-body"><p>Compare any part, or every page and system, of a score with the printed source. Submit your findings and actual scope, or explicitly declare <strong>No errors found in the reviewed scope</strong>.</p><p>A clean review leaves other people’s findings open. Reviewing does not require changing the music and does not by itself verify the work.</p></div></section>
-      <section class="panel"><div class="panel-heading"><h2>Help fix reported errors</h2></div><div class="panel-body"><p>Choose a work with outstanding findings and select <strong>Get correction package</strong>. Download the ZIP, attach it to your chosen AI, and paste the supplied instructions.</p><p>Choose <strong>Return AI response</strong> when it is ready. Your contribution ends there. Another person checks the proposed corrections.</p></div></section>
-      <section class="panel"><div class="panel-heading"><h2>Review proposed fixes</h2></div><div class="panel-body"><p>Open a shared proposal and compare its rendering with the printed source. Original reports, historical context, proposed LilyPond and decision history stay available.</p><p>Check any selected finding: <strong>Looks correct</strong>, <strong>Still needs correction</strong>, or <strong>Needs clarification</strong>. Other findings remain for other people. Applying a reviewed correction to the project is a separate maintainer step.</p></div></section>
+      <section class="panel"><div class="panel-heading"><h2>Proofread</h2></div><div class="panel-body"><p>Compare the current project score with the printed source and mark or describe errors. You can also record which pages you checked, including when you found no errors.</p></div></section>
+      <section class="panel"><div class="panel-heading"><h2>Send corrections to AI</h2></div><div class="panel-body"><p>Select <strong>Get correction package</strong>. Download the reports and instructions, attach the ZIP to your AI, and paste the instructions. Use <strong>Return AI response</strong> to send back the result.</p></div></section>
+      <section class="panel"><div class="panel-heading"><h2>Check AI corrections</h2></div><div class="panel-body"><p>Open an AI’s proposed version and compare its changes with the printed source. For each change you check, choose <strong>Looks correct</strong>, <strong>Still needs correction</strong>, or <strong>Needs clarification</strong>.</p></div></section>
     </div>
 
     <section class="panel"><div class="panel-heading"><h2>What the status means</h2></div><div class="panel-body prose"><ul>
-      <li><strong>Saved locally:</strong> a draft on this browser and site, available without signing in.</li>
-      <li><strong>Submitted to the project:</strong> the shared service acknowledged the write and issued a stable receipt.</li>
-      <li><strong>Awaiting review:</strong> an AI response is a proposal that has not changed the published score.</li>
-      <li><strong>Applied to the project:</strong> an authorized maintainer recorded the reviewed candidate at the canonical repository revision.</li>
-    </ul><p>Sign in with GitHub when submitting. An optional typed name is not authenticated identity. Complete coverage, an appointed verifier and approval of the exact eligible revision are required for human verification.</p></div></section>
+      <li><strong>Saved locally:</strong> a draft on this device.</li>
+      <li><strong>Submitted to the project:</strong> your contribution is saved and has a receipt.</li>
+      <li><strong>Awaiting review:</strong> the AI’s corrections are ready to check.</li>
+      <li><strong>Applied to the project:</strong> the reviewed corrections are in the project score.</li>
+    </ul><p>Sign in with GitHub to submit.</p></div></section>
 
-    <section class="panel"><div class="panel-heading"><h2>Existing packages and local drafts</h2></div><div class="panel-body"><p><strong>Open package</strong>, the brush editor, text-only findings, local saved reviews and recovery ZIPs remain available. Download a recovery package before changing browser profiles or origins; unsubmitted drafts remain local.</p><p>A shared AI response can be opened from a fresh browser because the project retains its immutable original task. Legacy local tasks still need their original retained baseline or a supported portable backup; validation is never bypassed.</p><p>Use the optional agent / maintainer handoff on a submitted report or reviewed proposal to prepare a traceable repository contribution. Ordinary reporting has no PR requirement.</p><p><a href="score/HANDOFF_FORMATS.md">Package and response details</a> · <a href="../contribute.html">Contribution guide</a></p></div></section>
+    <section class="panel"><div class="panel-heading"><h2>Local drafts and packages</h2></div><div class="panel-body"><p>Use <strong>Open package</strong> to continue from a saved ZIP. Download a recovery package to carry an unsubmitted draft to another browser or device.</p><p><a href="score/HANDOFF_FORMATS.md">Package and response details</a> · <a href="../contribute.html">Contribution guide</a></p></div></section>
   </main>
 </body>
 </html>
