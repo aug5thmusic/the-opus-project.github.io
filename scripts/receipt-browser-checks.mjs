@@ -60,5 +60,31 @@ export async function checkReceiptFollowups({actor,proposalId,state,api,evidence
     check(await page.locator('#editor').isHidden()&&await page.locator('#correctionErrorReceipt').isVisible()&&stable(idle,await layout(page)),`${width}: confirmed B closes its editor without changing the idle score layout`);
     await page.screenshot({path:resolve(evidence,`receipt-second-error-confirmed-${width}.png`)});
     await clear(page,idle,`${width}: confirmed B`);
+    if(width===785){
+      const resubmitB=async()=>{
+        await page.locator('#reportAnotherError').click();await page.locator('#toggleComments').click();
+        await page.locator('.finding-open').filter({hasText:b}).click();return submit(page);
+      };
+      const receiptFocused=()=>page.evaluate(()=>document.activeElement?.id==='correctionErrorReceipt');
+      check(await resubmitB()===receiptB&&await receiptFocused(),'confirmed receipt receives keyboard focus and reuses the actual B report');
+      // Use the real timer, not a fake clock or mocked submission.
+      await new Promise(resolve=>setTimeout(resolve,4200));
+      check(await page.locator('#correctionErrorReceipt').isVisible()&&await receiptFocused()&&stable(idle,await layout(page)),'focused receipt survives the real 3.5-second timeout without moving the workspace');
+      await page.screenshot({path:resolve(evidence,'receipt-keyboard-after-timeout.png')});
+      await page.keyboard.press('Tab');await page.keyboard.press('Tab');
+      check(await page.evaluate(()=>document.activeElement?.id==='correctionBack'),'Tab can leave the notification for a visible review control');
+      const leftAt=Date.now();await page.waitForFunction(()=>document.getElementById('message').hidden,null,{timeout:6500});
+      check(Date.now()-leftAt>=3400&&await page.evaluate(()=>document.activeElement?.id==='correctionBack')&&stable(idle,await layout(page)),'unfocused acknowledgement expires after a fresh reading interval without moving focus or scores');
+      await resubmitB();await page.keyboard.press('Tab');
+      check(await page.evaluate(()=>document.activeElement?.id==='dismissMessage'),'receipt keyboard navigation reaches the explicit dismiss control');
+      await page.keyboard.press('Enter');
+      check(await page.locator('#message').isHidden()&&await page.evaluate(()=>document.activeElement===document.querySelector('#correctionHeader .problem-picker'))&&stable(idle,await layout(page)),'keyboard dismissal returns focus to the visible problem browser without moving scores');
+      await resubmitB();await new Promise(resolve=>setTimeout(resolve,4200));
+      check(await page.locator('#correctionErrorReceipt').isVisible()&&await receiptFocused(),'receipt remains the active keyboard target when activated after expiry would have occurred');
+      await Promise.all([page.waitForURL(url=>url.searchParams.get('report')===receiptB),page.keyboard.press('Enter')]);
+      await page.locator('#sharedReceipt').waitFor({state:'visible'});
+      check((await page.locator('#sharedReceipt').innerText()).includes(receiptB)&&(await page.locator('#sharedReceipt').innerText()).includes(b),'Enter on the retained focused link opens the exact confirmed report receipt');
+      await page.screenshot({path:resolve(evidence,'receipt-opened-by-keyboard.png')});
+    }
   }
 }

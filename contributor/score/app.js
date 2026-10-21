@@ -36,12 +36,34 @@ function noticeLayout(){
   $('notices').classList.toggle('error',Boolean(storageProblem)||$('message').dataset.error==='true');
   $('dismissMessage').hidden=$('message').hidden||same||busy;
 }
-function dismissMessage(){clearTimeout(messageTimer);$('message').hidden=true;$('message').dataset.error='false';noticeLayout();}
+function focusAfterMessage(){
+  const target=[document.querySelector('#correctionHeader .problem-picker'),$('newFinding'),$('workspaceTools')].find(el=>el&&!el.disabled&&el.getClientRects().length&&!el.closest('[inert]'));
+  target?.focus({preventScroll:true});
+}
+function dismissMessage(){
+  const restoreFocus=$('message').contains(document.activeElement)||document.activeElement===$('dismissMessage');
+  clearTimeout(messageTimer);$('message').hidden=true;$('message').dataset.error='false';noticeLayout();
+  if(restoreFocus)focusAfterMessage();
+}
+function scheduleMessageExpiry(delay=3500){
+  clearTimeout(messageTimer);
+  if($('message').hidden||$('message').dataset.error==='true'||$('notices').contains(document.activeElement))return;
+  messageTimer=setTimeout(()=>{
+    if(busy){scheduleMessageExpiry(1000);return;}
+    if(!$('notices').contains(document.activeElement))dismissMessage();
+  },delay);
+}
+// Keep focused links and controls available. Leaving the notification starts a
+// fresh reading interval; deliberate dismissal and replacement remain immediate.
+$('notices').addEventListener('focusin',()=>clearTimeout(messageTimer));
+$('notices').addEventListener('focusout',event=>{if(!$('notices').contains(event.relatedTarget))queueMicrotask(()=>scheduleMessageExpiry());});
 function message(text,error=false,replace=false){
   // Routine confirmations expire; an unrelated action must not erase an error.
   if(!replace&&!error&&!busy&&!$('message').hidden&&$('message').dataset.error==='true')return;
+  const restoreFocus=$('message').contains(document.activeElement);
   clearTimeout(messageTimer);$('message').textContent=text;$('message').hidden=!text;$('message').dataset.error=String(error);$('noticeCopy').scrollTop=0;noticeLayout();
-  if(text&&!error){const expire=()=>{if(busy){messageTimer=setTimeout(expire,1000);return;}dismissMessage();};messageTimer=setTimeout(expire,3500);}
+  if(restoreFocus){if(text)$('noticeCopy').focus({preventScroll:true});else focusAfterMessage();}
+  scheduleMessageExpiry();
 }
 function storageStatus(text,problem=''){
   const previous=storageProblem;storageProblem=problem;$('storage').textContent=text;$('storage').hidden=!text;$('storage').classList.toggle('unsaved',Boolean(problem));
