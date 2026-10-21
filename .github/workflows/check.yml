@@ -14,7 +14,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install --yes lilypond
       - name: Explicitly provision the trusted isolated runtime image
         run: docker build --pull=false --build-arg OPUS_POLICY_SHA256="$(python3 scripts/isolated_runner.py policy)" -t opus-isolated-runtime:1 scripts/isolated-runtime
-      - name: Require genuine compiler and PDF isolation acceptance
+      - name: Require genuine compiler, PDF and controlled network isolation acceptance
         env:
           OPUS_REQUIRE_ISOLATION: "1"
         run: python3 -B scripts/test_isolated_runner.py
@@ -35,6 +35,7 @@ jobs:
           node contributor/score/qa/shared-packages.test.mjs
           node contributor/score/qa/shared-client.test.mjs
           node contributor/score/qa/shared-ui.test.mjs
+          node contributor/score/qa/completion-import.test.mjs
           node contributor/score/qa/instruction-boundary.test.mjs
       - name: Test restricted agent broker boundaries without model inference
         run: python3 -B scripts/test_restricted_agent.py

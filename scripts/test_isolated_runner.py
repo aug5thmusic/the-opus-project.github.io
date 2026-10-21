@@ -1,5 +1,7 @@
 """Fail-closed unit tests plus mandatory-in-CI genuine container acceptance."""
 import io
+from contextlib import contextmanager
+import ipaddress
 import json
 import os
 from pathlib import Path
@@ -7,7 +9,8 @@ import subprocess
 import tarfile
 import tempfile
 import unittest
-from unittest.mock import patch
+import uuid
+from unittest.mock import Mock, patch
 
 import isolated_runner as runner
 
@@ -25,7 +28,172 @@ def archive(files, operation='compile', extra=None):
     return output.getvalue()
 
 
+def verified_network_denial(control, isolated):
+    """An unreachable control is unavailable evidence, never an isolation pass."""
+    def reachable_control():
+        try:
+            result = control()
+        except (runner.IsolatedRunError, OSError, ValueError) as error:
+            raise AssertionError('Network isolation acceptance UNAVAILABLE: the positive control failed.') from error
+        if not isinstance(result, dict) or result.get('connected') is not True or result.get('handshake') is not True:
+            raise AssertionError('Network isolation acceptance UNAVAILABLE: the positive control could not reach its listener.')
+        return result
+    before = reachable_control()
+    denied = isolated()
+    after = reachable_control()
+    if not isinstance(denied, dict) or denied.get('connected') is not False or denied.get('handshake') is not False:
+        raise AssertionError('The production network-none container reached the controlled listener or returned invalid evidence.')
+    return {'before': before, 'isolated': denied, 'after': after}
+
+
+def _checked_test_docker(runtime, arguments, *, timeout=15, output_limit=65536):
+    code, output, error = runner._bounded([*runtime['_docker'], *arguments], env=runtime['_env'],
+                                         timeout=timeout, output_limit=output_limit)
+    if code:
+        raise AssertionError('Controlled network fixture unavailable: '+error.decode('utf-8', 'replace')[-1000:])
+    return output
+
+
+@contextmanager
+def _fixed_network_test_container(runtime, network, root, token, target=None):
+    """Test-only network control: fixed canaries, no imported input or commands."""
+    name = 'opus-network-control-'+uuid.uuid4().hex
+    directory = root / name
+    directory.mkdir(mode=0o755)
+    job = {'name': 'network_listener' if target is None else 'network_probe',
+           'networkToken': token, 'timeout': 90 if target is None else 10}
+    if target is not None:
+        job['networkTarget'] = str(ipaddress.IPv4Address(target))
+    (directory / 'job.json').write_text(json.dumps(job), encoding='utf-8')
+    (directory / 'job.json').chmod(0o444)
+    command = runner._container_create_command(runtime['_docker'], runtime['imageId'],
+                                                str(directory), name, 'canary')
+    # This is the sole network-enabled override, confined to this test module.
+    # Every other production flag, image ID, worker and fixed canary is shared.
+    command[command.index('--network') + 1] = network
+    created = False
+    try:
+        code, _, error = runner._bounded(command, env=runtime['_env'])
+        if code:
+            raise AssertionError('Network control container unavailable: '+error.decode('utf-8', 'replace')[-1000:])
+        created = True
+        yield name
+    finally:
+        if created:
+            _checked_test_docker(runtime, ['rm', '--force', name])
+
+
+def controlled_network_acceptance():
+    """Disposable internal bridge; no published port or internet dependency."""
+    runtime = runner._available_runtime()
+    network = 'opus-network-test-'+uuid.uuid4().hex
+    token = uuid.uuid4().hex + uuid.uuid4().hex
+    created = False
+    try:
+        _checked_test_docker(runtime, ['network', 'create', '--internal', '--driver', 'bridge', network])
+        created = True
+        with tempfile.TemporaryDirectory(prefix='opus-network-fixture-') as temp:
+            root = Path(temp)
+            root.chmod(0o755)
+            with _fixed_network_test_container(runtime, network, root, token) as listener:
+                _checked_test_docker(runtime, ['start', listener])
+                networks = json.loads(_checked_test_docker(runtime, ['inspect', '--format',
+                                      '{{json .NetworkSettings.Networks}}', listener]))
+                target = str(ipaddress.IPv4Address(networks[network]['IPAddress']))
+
+                def control():
+                    with _fixed_network_test_container(runtime, network, root, token, target) as client:
+                        raw = _checked_test_docker(runtime, ['start', '--attach', client], timeout=20)
+                        state = json.loads(_checked_test_docker(runtime, ['inspect', '--format', '{{json .State}}', client]))
+                        if state.get('Running') is not False or state.get('ExitCode') != 0 or state.get('OOMKilled'):
+                            raise AssertionError('Network control did not finish successfully.')
+                        return runner._outputs(raw, 'canary')[1]['canary']
+
+                def isolated():
+                    # The actual production path has no network override.
+                    _, receipt = runner._run('canary', {}, {'name': 'network_probe',
+                                             'networkTarget': target, 'networkToken': token}, timeout_seconds=10)
+                    if receipt['imageId'] != runtime['imageId']:
+                        raise AssertionError('The image changed between the control and isolation probes.')
+                    return receipt['canary']
+
+                return verified_network_denial(control, isolated)
+    finally:
+        if created:
+            _checked_test_docker(runtime, ['network', 'rm', network])
+
+
 class FailClosedTests(unittest.TestCase):
+    def test_failed_control_cleans_fixture_without_running_isolation_probe(self):
+        calls, created, jobs = [], [], []
+        runtime = {'imageId': 'sha256:'+'a'*64, '_docker': ['docker'], '_env': {}}
+        network_name = None
+
+        def checked(_runtime, arguments, **kwargs):
+            nonlocal network_name
+            calls.append(arguments)
+            if arguments[:2] == ['network', 'create']:
+                self.assertIn('--internal', arguments)
+                network_name = arguments[-1]
+            if arguments[:2] == ['inspect', '--format']:
+                if 'NetworkSettings' in arguments[2]:
+                    return json.dumps({network_name: {'IPAddress': '172.29.0.2'}}).encode()
+                return b'{"Running":false,"ExitCode":0,"OOMKilled":false}'
+            if arguments[:2] == ['start', '--attach']:
+                return archive({}, 'canary', {'canary': {'connected': False, 'handshake': False}})
+            return b''
+
+        def create(arguments, **kwargs):
+            created.append(arguments)
+            self.assertEqual(arguments[arguments.index('--network')+1], network_name)
+            self.assertEqual(arguments[-2:], [runtime['imageId'], 'canary'])
+            self.assertNotIn('--publish', arguments)
+            mount = arguments[arguments.index('--mount')+1]
+            directory = Path(mount.removeprefix('type=bind,source=').removesuffix(',target=/input,readonly'))
+            self.assertEqual([file.name for file in directory.iterdir()], ['job.json'])
+            jobs.append(json.loads((directory/'job.json').read_text()))
+            return 0, b'', b''
+
+        with patch.object(runner, '_available_runtime', return_value=runtime), \
+                patch(__name__+'._checked_test_docker', side_effect=checked), \
+                patch.object(runner, '_bounded', side_effect=create), patch.object(runner, '_run') as isolated:
+            with self.assertRaisesRegex(AssertionError, 'UNAVAILABLE'):
+                controlled_network_acceptance()
+            isolated.assert_not_called()
+        self.assertEqual([job['name'] for job in jobs], ['network_listener', 'network_probe'])
+        self.assertEqual(jobs[0]['networkToken'], jobs[1]['networkToken'])
+        names = [command[command.index('--name')+1] for command in created]
+        for name in names:
+            self.assertIn(['rm', '--force', name], calls)
+        self.assertEqual(calls[-1], ['network', 'rm', network_name])
+
+    def test_unreachable_or_invalid_positive_control_cannot_pass_isolation(self):
+        for result in ({'connected': False, 'handshake': False}, {'connected': True, 'handshake': False}, None):
+            control, isolated = Mock(return_value=result), Mock()
+            with self.subTest(result=result), self.assertRaisesRegex(AssertionError, 'UNAVAILABLE'):
+                verified_network_denial(control, isolated)
+            isolated.assert_not_called()
+        control, isolated = Mock(side_effect=runner.IsolatedRunError('listener failed')), Mock()
+        with self.assertRaisesRegex(AssertionError, 'UNAVAILABLE'):
+            verified_network_denial(control, isolated)
+        isolated.assert_not_called()
+
+    def test_listener_must_remain_reachable_after_denial(self):
+        control = Mock(side_effect=[{'connected': True, 'handshake': True}, {'connected': False, 'handshake': False}])
+        isolated = Mock(return_value={'connected': False, 'handshake': False})
+        with self.assertRaisesRegex(AssertionError, 'UNAVAILABLE'):
+            verified_network_denial(control, isolated)
+        isolated.assert_called_once()
+
+    def test_controlled_network_receipt_requires_denial_between_two_live_controls(self):
+        control = Mock(return_value={'connected': True, 'handshake': True})
+        denied = {'connected': False, 'handshake': False}
+        self.assertEqual(verified_network_denial(control, lambda: denied)['isolated'], denied)
+        self.assertEqual(control.call_count, 2)
+        for invalid in ({'connected': True, 'handshake': False}, {'connected': True, 'handshake': True}, {}):
+            with self.subTest(invalid=invalid), self.assertRaisesRegex(AssertionError, 'network-none'):
+                verified_network_denial(control, lambda: invalid)
+
     def test_windows_host_canary_is_an_absolute_unmounted_linux_reference(self):
         with patch.object(runner, '_run', return_value=({}, {'canary': {}})) as run:
             runner._canary_for_tests('probe', outside=r'C:\Users\Example\host-canary.txt')
@@ -97,6 +265,7 @@ class FailClosedTests(unittest.TestCase):
         with patch.object(runner, '_available_runtime', return_value=available), patch.object(runner, '_bounded', side_effect=execute):
             files, _ = runner._run('compile', {'source.ly': b'{ c1 }'}, {})
         create = calls[0]
+        self.assertEqual(create[create.index('--network') + 1], 'none')
         for required in ('--pull=never', '--read-only', 'none', '65532:65532', 'ALL', 'no-new-privileges', '--pids-limit', '--memory', '--memory-swap', '--cpus', '--tmpfs'):
             self.assertIn(required, create)
         mounts = [create[i+1] for i, value in enumerate(create) if value == '--mount']
@@ -144,18 +313,24 @@ class RealContainerTests(unittest.TestCase):
                 raise AssertionError('CI requires genuine isolated runtime tests: '+str(error)) from error
             raise unittest.SkipTest('Actual container tests NOT RUN: '+str(error))
 
-    def test_host_read_write_environment_network_and_capability_canaries(self):
+    def test_host_read_write_environment_and_capability_canaries(self):
         with tempfile.TemporaryDirectory(prefix='opus-unmounted-canary-') as temp:
             outside = Path(temp)/'credential.txt'; outside.write_text('HOST CANARY MUST NOT LEAK')
             with patch.dict(os.environ, {'OPUS_CANARY_SECRET': 'HOST ENV MUST NOT LEAK'}):
                 result = runner._canary_for_tests('probe', outside=str(outside))['canary']
             self.assertEqual(outside.read_text(), 'HOST CANARY MUST NOT LEAK')
             self.assertEqual(result['uid'], 65532)
-            for key in ('outsideReadable', 'outsideWritable', 'network', 'socket'):
+            for key in ('outsideReadable', 'outsideWritable', 'socket'):
                 self.assertFalse(result[key], key)
             self.assertIsNone(result['credential'])
             self.assertTrue(result['noNewPrivs'])
             self.assertTrue(result['capsZero'])
+
+    def test_network_denial_has_live_positive_controls_before_and_after(self):
+        result = controlled_network_acceptance()
+        self.assertTrue(result['before']['handshake'])
+        self.assertFalse(result['isolated']['connected'])
+        self.assertTrue(result['after']['handshake'])
 
     def test_wall_cpu_memory_pid_output_and_link_limits(self):
         for name in ('timeout', 'cpu', 'memory', 'output', 'symlink'):

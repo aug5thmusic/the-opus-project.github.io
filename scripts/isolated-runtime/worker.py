@@ -1,5 +1,6 @@
 """Trusted fixed operations inside the disposable container, never on the host."""
 import io
+import ipaddress
 import json
 import os
 from pathlib import Path
@@ -17,6 +18,7 @@ OUT = WORK / 'output'
 FILE_LIMIT = 64 * 1024 * 1024
 OUTPUT_LIMIT = 64 * 1024 * 1024
 LOG_LIMIT = 1024 * 1024
+NETWORK_CANARY_PORT = 37271
 
 
 def command(argv, timeout):
@@ -44,18 +46,62 @@ def canary(name, job):
             wrote = True
         except OSError:
             pass
-        connected = False
-        try:
-            with socket.create_connection(('1.1.1.1', 443), timeout=1):
-                connected = True
-        except OSError:
-            pass
         status = Path('/proc/self/status').read_text()
-        return {'outsideReadable': read, 'outsideWritable': wrote, 'network': connected,
+        return {'outsideReadable': read, 'outsideWritable': wrote,
                 'uid': os.getuid(), 'credential': os.environ.get('OPUS_CANARY_SECRET'),
                 'socket': Path('/var/run/docker.sock').exists(),
                 'noNewPrivs': bool(re.search(r'NoNewPrivs:\s+1', status)),
                 'capsZero': bool(re.search(r'CapEff:\s+0+\s', status))}
+    if name in ('network_listener', 'network_probe'):
+        # Only the genuine test harness supplies this fresh, non-secret token.
+        # No public endpoint, DNS, HTTP request or caller-selected port is used.
+        token = job.get('networkToken', '')
+        if not isinstance(token, str) or not re.fullmatch(r'[a-f0-9]{64}', token):
+            raise ValueError('Invalid network canary token.')
+        challenge = token.encode('ascii')
+        response = b'OPUS_NETWORK_CANARY:' + challenge
+        if name == 'network_listener':
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
+                listener.bind(('0.0.0.0', NETWORK_CANARY_PORT))
+                listener.listen(4)
+                listener.settimeout(1)
+                end = time.monotonic() + min(int(job['timeout']), 90)
+                accepted = 0
+                while time.monotonic() < end and accepted < 32:
+                    try:
+                        connection, _ = listener.accept()
+                    except socket.timeout:
+                        continue
+                    accepted += 1
+                    with connection:
+                        connection.settimeout(2)
+                        received = bytearray()
+                        while len(received) < len(challenge):
+                            chunk = connection.recv(len(challenge) - len(received))
+                            if not chunk:
+                                break
+                            received.extend(chunk)
+                        if received == challenge:
+                            connection.sendall(response)
+                return {'accepted': accepted}
+        target = str(ipaddress.IPv4Address(job['networkTarget']))
+        connected = False
+        # Bounded startup retries allow the fixed listener to finish binding.
+        for _ in range(5):
+            try:
+                with socket.create_connection((target, NETWORK_CANARY_PORT), timeout=1) as connection:
+                    connected = True
+                    connection.sendall(challenge)
+                    received = bytearray()
+                    while len(received) < len(response):
+                        chunk = connection.recv(len(response) - len(received))
+                        if not chunk:
+                            break
+                        received.extend(chunk)
+                    return {'connected': True, 'handshake': received == response}
+            except OSError:
+                time.sleep(.2)
+        return {'connected': connected, 'handshake': False}
     if name == 'timeout':
         while True:
             time.sleep(.1)

@@ -24,6 +24,7 @@ import ssl
 import stat
 import struct
 import subprocess
+import sys
 import threading
 import time
 import urllib.parse
@@ -34,6 +35,7 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from task_instructions import build_delivery, POLICY_VERSION as TASK_INSTRUCTION_POLICY
+from completion_import import migrate as migrate_completion
 
 ROOT = Path(__file__).resolve().parents[1]
 MAX_FILE = 100 * 1024 * 1024
@@ -512,6 +514,9 @@ class Store:
                 return report
             return self.idempotent(db, user, body.get("requestId"), {k: v for k, v in body.items() if k != "package"}, operation, f"reports:{slug}")
 
+    def import_completion(self, slug, body, user):
+        return migrate_completion(self, slug, body, user, sys.modules[__name__])
+
     def submit_task(self, body, user):
         raw = zip_bytes(body.get("package"))
         manifest, review, payloads = package(raw)
@@ -914,7 +919,7 @@ class Store:
             publication.update(proposalId=ident, taskId=record["taskId"],
                                candidate=record["candidate"], baseline=record["task"]["baseline"],
                                approvedFindingIds=approved, uncheckedChangedFindingIds=unchecked_changes,
-                               allowedPaths=[record["current"]["path"]])
+                               allowedPaths=[record["current"]["path"]] if record["response"]["code"]["status"] == "changed" else [])
             if record["response"]["code"]["status"] == "unchanged":
                 start = "Prepare a review-only metadata/provenance PR with unchanged LilyPond; do not manufacture a musical edit"
             elif unchecked_changes:
@@ -1201,7 +1206,7 @@ class Handler(BaseHTTPRequestHandler):
                 except ValueError:
                     raise Problem("Invalid pagination.") from None
                 return self.send(200, store.works(after, limit))
-            match = re.fullmatch(r"/api/works/([a-z0-9-]+)(?:/(snapshot|reports|applications|verification|assets/source))?", path)
+            match = re.fullmatch(r"/api/works/([a-z0-9-]+)(?:/(snapshot|reports|applications|verification|assets/source|imports/completion))?", path)
             if match:
                 slug, action = match.groups()
                 if action == "assets/source":
@@ -1229,22 +1234,24 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send(200, {"sha256": sha, "size": len(data), "url": "/api/assets/"+sha}) if self.command == "POST" else self.send(200, data, "application/pdf")
                 if self.command == "GET" and action in (None, "snapshot"):
                     return self.send(200, store.snapshot(slug) if action else store.work(slug))
-                if self.command == "POST" and action in ("reports", "applications", "verification"):
+                if self.command == "POST" and action in ("reports", "applications", "verification", "imports/completion"):
                     user = self.app.user(self.headers, True)
                     if action == "verification":
                         require("verifier" in user.get("roles", []), "Only an appointed verifier may request verification.", 403)
                         raise Problem("Verification is recorded through the project's human verification PR: eligible Step 3, complete source/render coverage, appointed verifier, and explicit approval of the exact canonical revision. This service never changes verified_by from report submissions.", 409)
                     body = self.read_body()
+                    if action == "imports/completion":
+                        return self.send(200, store.import_completion(slug, body, user))
                     return self.send(200, store.submit_report(slug, body, user) if action == "reports" else store.apply(slug, body, user))
             if path in ("/api/tasks", "/api/proposals") and self.command == "POST":
                 user = self.app.user(self.headers, True)
                 body = self.read_body()
                 require(isinstance(body, dict), "Invalid submission.")
                 return self.send(200, store.submit_task(body, user) if path.endswith("tasks") else store.submit_proposal(body, user))
-            match = re.fullmatch(r"/api/(reports|tasks|proposals)/([A-Za-z0-9_-]+)(?:/(package|handoff|decisions|renderings))?", path)
+            match = re.fullmatch(r"/api/(reports|tasks|proposals|completion-imports)/([A-Za-z0-9_-]+)(?:/(package|handoff|decisions|renderings))?", path)
             if match:
                 plural, ident, action = match.groups()
-                kind = {"reports": "report", "tasks": "task", "proposals": "proposal"}[plural]
+                kind = {"reports": "report", "tasks": "task", "proposals": "proposal", "completion-imports": "completion-import"}[plural]
                 if self.command == "GET" and action in (None, "package", "handoff"):
                     if action == "handoff":
                         require(kind in ("report", "proposal"), "No handoff for this record.", 404)

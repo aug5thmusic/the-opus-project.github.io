@@ -4,14 +4,16 @@ import {LIMITS} from './workflow.js';
 import {GITHUB_INSTRUCTIONS} from './github-handoff.js';
 const $=id=>document.getElementById(id);
 export function installCompletion(api){
-  let job=null,attempt=null,urls=[],published=null;
+  let job=null,attempt=null,urls=[],published=null,publishedPackage=null;
+  const sendProject=document.createElement('button');sendProject.id='sendCompletionToProject';sendProject.type='button';sendProject.className='primary';sendProject.textContent='Send to project';sendProject.hidden=true;$('finishDownloads').after(sendProject);
   const io={prepare:prepareCompletion,zip:api.zip,commit:api.commitCompletion,copy:text=>navigator.clipboard.writeText(text)};
   const declaration=()=>({scope:document.querySelector('input[name="finishScope"]:checked')?.value??'',note:$('finishNote').value,reviewer:$('finishReviewer').value});
   const status=text=>{$('finishStatus').textContent=text;};
-  function clear(){for(const url of urls)URL.revokeObjectURL(url);urls=[];$('finishDownloads').replaceChildren();$('finishSummary').textContent='';$('githubHandoff').hidden=true;$('githubPrompt').hidden=true;$('githubInstructions').value='';$('prepareGithub').setAttribute('aria-expanded','false');$('finishForm').hidden=false;$('finishIntro').hidden=false;$('finishOverview').hidden=false;$('finishTitle').textContent='Finish review';published=null;}
+  function clear(){for(const url of urls)URL.revokeObjectURL(url);urls=[];$('finishDownloads').replaceChildren();$('finishSummary').textContent='';$('githubHandoff').hidden=true;$('githubPrompt').hidden=true;$('githubInstructions').value='';$('prepareGithub').setAttribute('aria-expanded','false');$('finishForm').hidden=false;$('finishIntro').hidden=false;$('finishOverview').hidden=false;$('finishTitle').textContent='Finish review';published=null;publishedPackage=null;sendProject.hidden=true;}
   function controls(){
     const busy=Boolean(job);for(const field of $('finishForm').querySelectorAll('input,textarea'))field.disabled=busy;
     $('prepareFinish').disabled=busy||!declaration().scope||Boolean(published);$('closeFinish').disabled=busy;$('cancelFinish').hidden=!busy;$('cancelFinish').disabled=job?.phase==='committing';
+    sendProject.disabled=busy||!publishedPackage||!published||!api.matches(published);
   }
   function history(){const s=api.capture();$('completionHistory').replaceChildren();for(const r of [...s.completions].reverse()){const p=document.createElement('p');p.textContent=`${r.revision.id===s.revisionId?'Matches current review state':'Historical completion · does not declare the current revision'} · ${SCOPES[r.scope]} · ${r.createdAt} · ${r.reviewer??'Reviewer unknown'} · ${r.totals.unresolved} unresolved · ${r.totals.missingDecisions} missing decisions · ${r.id}`;$('completionHistory').append(p);}$('completionCount').textContent=s.completions.length;}
   function open(){
@@ -22,6 +24,7 @@ export function installCompletion(api){
   }
   function cancel(){if(job?.phase==='preparing'){job.cancelled=true;status('Cancelling preparation. Your work is retained; editing resumes when preparation stops.');}else if(job)status('Saving your review. Please wait.');else $('finishDialog').close();}
   $('finishReview').onclick=open;$('closeFinish').onclick=cancel;$('cancelFinish').onclick=cancel;
+  sendProject.onclick=()=>{if(job||!publishedPackage||!published||!api.matches(published))return;document.dispatchEvent(new CustomEvent('score-desk-send-completion',{detail:{...publishedPackage,stamp:published}}));};
   $('prepareGithub').onclick=()=>{if(!published||!api.matches(published))return;$('githubPrompt').hidden=false;$('prepareGithub').setAttribute('aria-expanded','true');};
   $('copyGithub').onclick=async()=>{
     if(!published||!api.matches(published))return;
@@ -47,7 +50,8 @@ export function installCompletion(api){
       if(!valid(scene))throw new Error('Completion retained as history; downloads were not published because the dialog was closed.');
       const fragment=document.createDocumentFragment(),individual=document.createElement('details'),label=document.createElement('summary');label.textContent=`Individual files (${payloads.size})`;individual.append(label);
       for(const [path,blob]of [['score-desk-completed-review.zip',zip],...payloads]){const a=document.createElement('a'),url=URL.createObjectURL(blob);urls.push(url);a.href=url;a.download=path.replaceAll('/','__');a.textContent=path==='score-desk-completed-review.zip'?'Download completed-review ZIP':path;a.className='download';(path==='score-desk-completed-review.zip'?fragment:individual).append(a);}fragment.append(individual);
-      $('finishSummary').textContent=summary;$('finishDownloads').append(fragment);published=scene.stamp;
+      fragment.firstChild.after(document.createTextNode(' '),sendProject);
+      $('finishSummary').textContent=summary;$('finishDownloads').append(fragment);published=scene.stamp;publishedPackage={blob:zip,completionId:record.id};sendProject.hidden=false;
       $('githubInstructions').value=instructions;$('githubCopyStatus').textContent='';$('githubHandoff').hidden=false;$('finishForm').hidden=true;$('finishIntro').hidden=true;$('finishOverview').hidden=true;$('finishTitle').textContent='Review saved locally';$('finishDialog').scrollTop=0;
       try{if(fields.reviewer.trim())localStorage.setItem('score-desk-reviewer',fields.reviewer.trim());else localStorage.removeItem('score-desk-reviewer');}catch{}
       status(`Package ready · ${{corrections:'Corrections reviewed',entire:'Entire work reviewed',partial:'Partial review'}[record.scope]} · ${record.totals.unresolved} unresolved · ${record.totals.missingDecisions} missing decisions.`);history();

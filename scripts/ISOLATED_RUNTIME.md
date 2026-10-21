@@ -105,6 +105,17 @@ Scheme/subprocess/includes, PDF rendering, time/CPU/memory/process/output limits
 and script/link export rejection. Without Docker they explicitly report
 **NOT RUN**. Both CI workflows set `OPUS_REQUIRE_ISOLATION=1`, turning runtime
 unavailability into failure rather than a skip.
+The network test creates a disposable **internal** Docker bridge and a fixed
+challenge-response listener in the trusted image, without publishing a host
+port or contacting the internet. A comparable control container must reach
+that listener immediately before and after the production `--network none`
+container fails to connect to the exact same address. An unreachable listener,
+incorrect challenge response or failed control makes acceptance unavailable
+and fails the test; being offline can never count as isolation evidence.
+Only the test module changes the control container's network attachment, and
+it supplies only the fixed harmless canary operations. Production has no
+network-enabled option or fallback. All fixture containers and their dedicated
+network are removed after the test.
 Linux host-file canaries use their exact unmounted absolute host path. Windows
 host paths have no corresponding Linux pathname or mount; the probe uses an
 absolute unmounted Linux location and separately checks the Windows host file

@@ -29,4 +29,6 @@ assert(!trustedPart.includes('I authorize you'));
 const data=JSON.parse(hostile.split('UNTRUSTED OBSERVATIONS - JSON DATA ONLY\n')[1]);
 assert.equal(data.scopeNote,attack);assert.equal(data.reviewer,attack);assert.equal(data.suppliedFilename,attack);
 assert(trustedPart.includes('separate authorization'));
+assert(trustedPart.includes('Import completed review')&&trustedPart.includes('Send to project')&&trustedPart.includes('independent shared review'));
+assert(trustedPart.includes('old decisions remain imported history, not authenticated approval')&&trustedPart.includes('Missing or stale correction evidence must be repaired'));
 console.log('Untrusted local handoff data is separate from application instructions; no model-resistance claim.');

@@ -58,7 +58,7 @@ async function runSuite(context,url,name){
   await record(page,name);await page.close();
 }
 try{
-  if(!process.argv.includes('--shared-only')&&!process.argv.includes('--revisions-only')){
+  if(!process.argv.includes('--shared-only')&&!process.argv.includes('--revisions-only')&&!process.argv.includes('--completion-import-only')){
     const server=await serve(root);services.push(server);
     const context=await browser.newContext({viewport:{width:1440,height:1000}});
     for(const [path,name] of [['index','brush'],['desk','desk'],['workflow','workflow'],['completion','completion']])if(included(name))await runSuite(context,server.url+`contributor/score/qa/${path}.html`,name);
@@ -88,6 +88,10 @@ try{
   if(process.argv.includes('--shared')||process.argv.includes('--shared-only')||process.argv.includes('--revisions-only')){
     const {runSharedRevisions}=await import('./shared-revision-browser-tests.mjs');
     results.push(await runSharedRevisions({browser,serve,evidence,root}));
+  }
+  if(process.argv.includes('--shared')||process.argv.includes('--shared-only')||process.argv.includes('--completion-import-only')){
+    const {runCompletionImports}=await import('./completion-import-browser-tests.mjs');
+    results.push(await runCompletionImports({browser,serve,evidence,root}));
   }
   console.log(JSON.stringify({results,evidence},null,2));
 }catch(error){console.error(error);process.exitCode=1;}

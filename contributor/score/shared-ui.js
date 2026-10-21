@@ -1,7 +1,7 @@
 import {SharedClient, sharedConfiguration} from './shared-client.js';
-import {loadSharedWork, prepareSharedReport, makeSharedTask, loadSharedTask, readSharedResponse, loadSharedProposal, blobBase64} from './shared-packages.js';
+import {loadSharedWork, prepareSharedReport, makeSharedTask, loadSharedTask, readSharedResponse, loadSharedProposal, blobBase64, inspectLocalCompletion, prepareLocalCompletionImport} from './shared-packages.js';
 import {clone, sha256} from './model.js';
-import {canonical} from './completion-model.js';
+import {canonical, SCOPES} from './completion-model.js';
 import {contextPaths, taskFindings} from './workflow.js';
 
 const $ = id => document.getElementById(id);
@@ -32,7 +32,13 @@ export function reportFindingSelection({submitted, checked, coverageChecked}, sc
   const selected = typeof coverageChecked === 'boolean' ? coverageChecked : true;
   return {checked: scoped && selected, disabled: !scoped, coverageChecked: selected};
 }
-const submissionKind = path => path.includes('/reports') ? 'report' : path === '/api/tasks' ? 'task' : path === '/api/proposals' || /^\/api\/proposals\/[^/]+\/renderings$/.test(path) ? 'proposal' : null;
+export function completionImportDestination(record) {
+  if (record?.kind !== 'completion-import' || typeof record.id !== 'string' || !record.id || typeof record.workId !== 'string' || !record.workId) throw new Error('The project acknowledgement is missing its saved import identity. Retry this same submission.');
+  if (typeof record.proposalId === 'string' && record.proposalId) return {kind: 'proposal', id: record.proposalId};
+  if (typeof record.reportId === 'string' && record.reportId) return {kind: 'report', id: record.reportId};
+  throw new Error('The project acknowledgement is missing its saved proposal or report. Retry this same submission.');
+}
+const submissionKind = path => /^\/api\/works\/[^/]+\/imports\/completion$/.test(path) ? 'completion-import' : path.includes('/reports') ? 'report' : path === '/api/tasks' ? 'task' : path === '/api/proposals' || /^\/api\/proposals\/[^/]+\/renderings$/.test(path) ? 'proposal' : null;
 function node(tag, text, className) { const element = document.createElement(tag); if (text != null) element.textContent = text; if (className) element.className = className; return element; }
 function action(text, handler, className) { const button = node('button', text, className); button.type = 'button'; button.onclick = handler; return button; }
 
@@ -80,6 +86,8 @@ export function installShared(api) {
         <button id="sharedReviewFixesPath" type="button"><b>Check AI corrections</b><span>Open an AI’s proposed version and check its changes.</span></button>
       </nav>
       <button id="sharedOpenScore" type="button">Open score</button>
+      <p><button id="sharedImportCompletion" type="button">Import completed review</button><input id="sharedCompletionFile" type="file" accept=".zip,application/zip" hidden></p>
+      <section id="sharedCompletionImport" hidden aria-labelledby="sharedCompletionHeading"><h3 id="sharedCompletionHeading">Send saved review to project</h3><p id="sharedCompletionSummary"></p><p id="sharedCompletionWork"></p><p>The original ZIP will be saved with your contribution.</p><button id="sharedSendCompletion" class="primary" type="button">Send to project</button><button id="sharedCancelCompletion" type="button">Cancel</button></section>
       <form id="sharedReportForm" hidden>
         <h3 id="sharedReportHeading">Submit findings</h3><p id="sharedDraftNotice"></p>
         <fieldset id="sharedScopeFields"><legend>What are you submitting?</legend><label><input type="radio" name="sharedScope" value="report"> Just the errors I marked</label><label><input type="radio" name="sharedScope" value="partial"> I proofread part of the score</label><label><input type="radio" name="sharedScope" value="whole"> I proofread the whole score</label></fieldset>
@@ -108,6 +116,7 @@ export function installShared(api) {
   let client = null, detail = null, selected = null, busy = false, mode = 'report', reportScene = null, proposal = null, proposalPosition = 0;
   let taskAttempt = null, taskLinks = [], proposalImages = [], handoffLinks = [], loadedSnapshot = null, proposalRender = 0;
   let reportDraftName = null, reportLegacyDraftName = null, reportFormGeneration = 0, reportFormEdits = 0;
+  let completionImport = null;
   const readSelectedWork = createCurrentWorkReader(slug => client.request(`/api/works/${idPart(slug)}`), () => selected);
   const status = (text, error = false) => { $('sharedStatus').textContent = text; $('sharedStatus').dataset.error = String(error); api.message(text, error); };
   const show = () => { $('workspaceDialog').close(); if (!$('sharedDialog').open) $('sharedDialog').showModal(); };
@@ -130,6 +139,7 @@ export function installShared(api) {
     if (proposal) for (const button of $('sharedProposalPanel').querySelectorAll('button,input,select,textarea')) button.disabled = busy || api.status().busy || button.dataset.sharedUnavailable === 'true';
     const correct = $('sharedLooksCorrect'); if (correct) correct.disabled = busy || api.status().busy || !proposal?.seed;
     const canonicalPdf = $('sharedUseProjectPdf'); if (canonicalPdf) canonicalPdf.hidden = !client?.user?.roles?.includes('maintainer');
+    $('sharedSendCompletion').disabled = busy || api.status().busy || !completionImport || !selected || !detail?.current;
   }
   function revoke(list) { for (const url of list) URL.revokeObjectURL(url); list.length = 0; }
   function download(blob, filename, label, parent, links = taskLinks) {
@@ -140,9 +150,24 @@ export function installShared(api) {
   function requireUser() { requireClient(); if (!client.user) { show(); throw new Error('Sign in to submit this contribution. Your draft and selected scope are kept.'); } }
   function requireWork() { requireClient(); if (!selected || !detail?.current || (detail.workId ?? detail.work?.slug) !== selected) throw new Error('Wait for the selected project work to load before continuing.'); }
   function receiptURL(kind, id) {
-    const url = new URL(location.href); url.searchParams.set('piece', selected ?? detail?.work?.slug ?? ''); url.searchParams.delete('report'); url.searchParams.delete('proposal'); url.searchParams.delete('task'); url.searchParams.set(kind, id); return url;
+    const url = new URL(location.href); url.searchParams.set('piece', selected ?? detail?.work?.slug ?? ''); for (const key of ['report', 'proposal', 'task', 'completionImport']) url.searchParams.delete(key); url.searchParams.set(kind, id); return url;
   }
   function actorName(record) { return record?.author ? identity(record.author) : 'Recorded contributor'; }
+  function completionEvidence(record) {
+    const original = node('details'); original.dataset.completionImportId = record.id;
+    original.append(node('summary', 'Original local review'));
+    const link = node('a', 'Open saved import receipt'); link.href = receiptURL('completionImport', record.id).href; original.append(link);
+    if (record.packageUrl) original.append(action('Download original completed-review ZIP', guard(async () => api.download(await client.asset(record.packageUrl), 'score-desk-completed-review.zip'))));
+    $('sharedReceipt').append(original);
+  }
+  async function completionReceipt(record) {
+    const target = completionImportDestination(record);
+    let linked;
+    try { linked = await client.request(`/api/${target.kind === 'proposal' ? 'proposals' : 'reports'}/${idPart(target.id)}`); }
+    catch { linked = {id: target.id, workId: record.workId, author: record.author, createdAt: record.createdAt}; }
+    receipt(target.kind, linked);
+    if (!linked.localCompletionImport) completionEvidence(record);
+  }
   function receipt(kind, record) {
     const root = $('sharedReceipt'); root.replaceChildren(); root.hidden = false;
     const id = record.id ?? record.report?.id ?? record.proposal?.id ?? record.task?.id;
@@ -155,6 +180,7 @@ export function installShared(api) {
     root.append(node('p', `${actorName(record)} · ${record.createdAt ?? ''}`));
     if (kind === 'proposal') { const open = action('Check corrections', guard(() => openProposal(id)), 'primary'); open.id = 'sharedReceiptOpenProposal'; root.append(open); }
     if (kind !== 'task') root.append(action('Agent / maintainer handoff (optional)', guard(() => handoff(kind, id))));
+    if (record.localCompletionImport) completionEvidence(record.localCompletionImport);
     history.replaceState(null, '', link.href); root.scrollIntoView({block: 'nearest'});
   }
   async function refreshPending() {
@@ -162,11 +188,12 @@ export function installShared(api) {
     const pending = await client.pending(); if (!pending.length) return;
     $('sharedPending').append(node('p', `${pending.length} submission${pending.length === 1 ? '' : 's'} waiting to send.`));
     for (const item of pending) {
-      const row = node('div', null, 'shared-retry'); row.append(node('span', `${item.path.includes('/reports') ? 'Review report' : item.path === '/api/tasks' ? 'Correction task' : item.path.endsWith('/renderings') ? 'Updated PDF' : item.path === '/api/proposals' ? 'AI response' : 'Review decision'} · ${new Date(item.createdAt).toLocaleString()}`));
+      const row = node('div', null, 'shared-retry'); row.append(node('span', `${submissionKind(item.path) === 'completion-import' ? 'Completed review' : item.path.includes('/reports') ? 'Review report' : item.path === '/api/tasks' ? 'Correction task' : item.path.endsWith('/renderings') ? 'Updated PDF' : item.path === '/api/proposals' ? 'AI response' : 'Review decision'} · ${new Date(item.createdAt).toLocaleString()}`));
       row.append(action('Retry safely', guard(() => run(async () => {
         const result = await client.write(item.path, item.body); const kind = submissionKind(item.path);
         if (result.workId && result.workId !== selected) { selected = result.workId; $('sharedWork').value = selected; await refreshWork(); }
-        if (kind) receipt(kind, result); else status('Review decision acknowledged by the project.');
+        if (kind === 'completion-import') { await completionReceipt(result); $('sharedCompletionImport').hidden = true; completionImport = null; }
+        else if (kind) receipt(kind, result); else status('Review decision acknowledged by the project.');
         await refreshPending(); if (selected) await refreshWork();
       })))); $('sharedPending').append(row);
     }
@@ -180,6 +207,7 @@ export function installShared(api) {
     const work = detail.work ?? detail;
     $('sharedWorkTitle').textContent = [work.composer, work.title ?? work.slug ?? selected].filter(Boolean).join(' — ');
     $('sharedRevision').textContent = detail.current ? `Score: ${detail.current.repositoryRevision ?? detail.current.snapshotId}. Reports: ${detail.revision ?? 'unknown'}.` : 'Score files are not ready yet.';
+    completionWork();
     $('sharedFindings').replaceChildren();
     const outstanding = (detail.findings ?? []).filter(finding => finding.state !== 'resolved');
     if (!outstanding.length) $('sharedFindings').append(node('p', 'No open reports.'));
@@ -198,6 +226,7 @@ export function installShared(api) {
     for (const item of detail.reports ?? []) {
       const card = node('article', null, 'shared-record'); card.append(node('strong', item.clean ? 'No errors found' : 'Submitted findings'), node('p', item.scope?.description ?? ''), node('small', actorName(item)), action('Open report', guard(() => openReceipt('report', item.id)))); $('sharedReports').append(card);
     }
+    controls();
   }
   async function openScore() {
     requireWork();
@@ -361,8 +390,48 @@ export function installShared(api) {
       receipt('proposal', record); await refreshWork(); await refreshPending(); status('AI response submitted.');
     });
   }
+  function completionWork() {
+    const work = detail?.work;
+    $('sharedCompletionWork').textContent = work && selected ? `Send to: ${[work.composer, work.title ?? work.slug ?? selected].filter(Boolean).join(' — ')}` : 'Choose the project work above.';
+  }
+  async function inspectCompletion(blob, expectedId = null) {
+    if (!blob) return;
+    completionImport = null;
+    $('sharedCompletionImport').hidden = true;
+    $('sharedCompletionSummary').textContent = '';
+    controls();
+    show(); await ready; requireClient();
+    await run(async () => {
+      status('Checking completed review…');
+      const inspected = await api.lock(() => inspectLocalCompletion(blob, api.inspectPdf));
+      if (expectedId && inspected.completion.id !== expectedId) throw new Error('This ZIP differs from the completed review you selected. The local review is unchanged.');
+      completionImport = inspected;
+      const summary = inspected.summary;
+      $('sharedCompletionSummary').textContent = `${summary.lyName} · ${SCOPES[summary.scope] ?? summary.scope} ${summary.scopeNote || ''} · ${new Date(summary.createdAt).toLocaleString()} · ${summary.findings} findings`;
+      $('sharedCompletionImport').hidden = false; $('sharedReportForm').hidden = true; $('sharedFixSection').hidden = true; $('sharedReceipt').hidden = true;
+      completionWork(); status('Choose the project work, then send this completed review.'); $('sharedCompletionImport').scrollIntoView({block: 'nearest'});
+    });
+  }
+  async function sendCompletion() {
+    requireUser(); requireWork(); if (!completionImport) throw new Error('Choose the completed-review ZIP first.');
+    await run(async () => {
+      const captured = completionImport, workId = selected;
+      const requestId = await contentKey({kind: 'completion-import', workId, actor: client.user.id, originalPackageSha256: captured.originalPackageSha256});
+      const prepared = await prepareLocalCompletionImport(captured, api.inspectPdf, {requestId});
+      status('Sending completed review…');
+      const record = await client.write(`/api/works/${idPart(workId)}/imports/completion`, prepared.submit);
+      if (record.workId !== workId) throw new Error('The project returned a receipt for a different work. Your local review is unchanged.');
+      await completionReceipt(record); $('sharedCompletionImport').hidden = true; completionImport = null;
+      await refreshWork(); await refreshPending(); status('Completed review saved to the project.');
+    });
+  }
   async function openReceipt(kind, id) {
     requireClient(); show();
+    if (kind === 'completionImport') {
+      const imported = await client.request(`/api/completion-imports/${idPart(id)}`);
+      if (imported.workId && imported.workId !== selected) { selected = imported.workId; $('sharedWork').value = selected; await refreshWork(); }
+      await completionReceipt(imported); return imported;
+    }
     const path = kind === 'report' ? 'reports' : kind === 'proposal' ? 'proposals' : 'tasks';
     const record = await client.request(`/api/${path}/${idPart(id)}`);
     if (record.workId && record.workId !== selected) { selected = record.workId; $('sharedWork').value = selected; await refreshWork(); }
@@ -539,7 +608,7 @@ export function installShared(api) {
   $('sharedSignOut').onclick = guard(async () => { await client.signOut(); status('Signed out. Local drafts remain on this device.'); });
   $('sharedDevForm').onsubmit = guard(async event => { event.preventDefault(); await client.localSignIn($('sharedDevLogin').value.trim()); await refreshPending(); status('Local test identity selected.'); });
   $('sharedRefresh').onclick = guard(() => run(async () => { await refreshWork(); status('Shared records refreshed.'); }));
-  $('sharedWork').onchange = guard(async () => { selected = $('sharedWork').value; detail = null; reportScene = null; $('sharedWorkTitle').textContent = selected ? 'Loading the selected work…' : 'Choose a project work'; $('sharedRevision').textContent = ''; for (const id of ['sharedFindings', 'sharedProposals', 'sharedReports']) $(id).replaceChildren(); $('sharedReportForm').hidden = true; $('sharedReceipt').hidden = true; $('sharedMaintainer').hidden = true; $('sharedSourceFallback').hidden = true; await refreshWork(); });
+  $('sharedWork').onchange = guard(async () => { selected = $('sharedWork').value; detail = null; reportScene = null; $('sharedWorkTitle').textContent = selected ? 'Loading the selected work…' : 'Choose a project work'; $('sharedRevision').textContent = ''; for (const id of ['sharedFindings', 'sharedProposals', 'sharedReports']) $(id).replaceChildren(); $('sharedReportForm').hidden = true; $('sharedReceipt').hidden = true; $('sharedMaintainer').hidden = true; $('sharedSourceFallback').hidden = true; completionWork(); controls(); await refreshWork(); });
   $('sharedOpenScore').onclick = guard(openScore);
   $('sharedReportPath').onclick = guard(openScore);
   $('sharedFixPath').onclick = () => { $('sharedFixSection').hidden = false; $('sharedReportForm').hidden = true; $('sharedFixSection').scrollIntoView({block: 'start'}); };
@@ -551,6 +620,14 @@ export function installShared(api) {
   $('sharedGetTask').onclick = guard(task);
   $('sharedReturnResponse').onclick = guard(async () => { requireUser(); $('sharedResponseFile').click(); });
   $('sharedResponseFile').onchange = guard(async event => { const file = event.target.files[0]; event.target.value = ''; await returnResponse(file); });
+  $('sharedImportCompletion').onclick = () => $('sharedCompletionFile').click();
+  $('sharedCompletionFile').onchange = guard(async event => { const file = event.target.files[0]; event.target.value = ''; await inspectCompletion(file); });
+  $('sharedSendCompletion').onclick = guard(sendCompletion);
+  $('sharedCancelCompletion').onclick = () => { if (!busy) { completionImport = null; $('sharedCompletionImport').hidden = true; } };
+  document.addEventListener('score-desk-send-completion', guard(async event => {
+    if (!event.detail?.blob || event.detail.stamp && !api.matches(event.detail.stamp)) return;
+    $('finishDialog').close(); await inspectCompletion(event.detail.blob, event.detail.completionId);
+  }));
   $('sharedCopyPrompt').onclick = guard(() => copy('sharedPrompt'));
   $('sharedCopyHandoff').onclick = guard(() => copy('sharedHandoffText'));
   $('sharedUploadSource').onclick = guard(() => run(async () => {
@@ -577,6 +654,7 @@ export function installShared(api) {
       if (params.get('proposal')) await openProposal(params.get('proposal'));
       else if (params.get('report')) await openReceipt('report', params.get('report'));
       else if (params.get('task')) await openReceipt('task', params.get('task'));
+      else if (params.get('completionImport')) await openReceipt('completionImport', params.get('completionImport'));
       else if (selected) show();
       if (!works.length) status('No works have been prepared in the shared service yet. Local packages and drafts are available.');
       else status('');
@@ -584,5 +662,5 @@ export function installShared(api) {
     finally { controls(); }
   })();
   controls();
-  return {ready, get client() { return client; }, refreshWork, openScore, reportForm, openProposal, returnResponse, state: () => ({selected, detail, proposal, busy})};
+  return {ready, get client() { return client; }, refreshWork, openScore, reportForm, openProposal, returnResponse, inspectCompletion, state: () => ({selected, detail, proposal, busy})};
 }

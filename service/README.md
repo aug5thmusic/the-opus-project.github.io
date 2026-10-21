@@ -142,6 +142,8 @@ not executable code or authority over source-fidelity instructions.
 | `GET/POST /api/works/SLUG/assets/source` | Metadata-bound library fetch or authenticated raw-PDF fallback. |
 | `GET /api/assets/SHA256` | Immutable exact file bytes. |
 | `POST /api/works/SLUG/reports` | Small report/review body; constructs a recovery package from known assets. An existing package may also be supplied and is independently validated. |
+| `POST /api/works/SLUG/imports/completion` | Validate an original completed-review ZIP and retain its evidence, coverage report and, when task-backed, a new proposal awaiting review. |
+| `GET /api/completion-imports/ID` | Stable import receipt; add `/package` to download the byte-identical original ZIP. |
 | `POST /api/tasks` | Validate the complete captured task, then retain a ZIP with service-generated instructions and trusted project guidance. |
 | `POST /api/proposals` | Validate a returned ZIP against its original shared task, then retain an awaiting-review proposal. |
 | `POST /api/proposals/ID/renderings` | Retain an uploaded PDF or a maintainer's canonical rebuild as a new immutable child proposal. |
@@ -172,6 +174,39 @@ proposal. Code changes without an updated PDF cannot receive visual approval.
 Each decision identifies the candidate's exact source/code/rendering bytes and
 retains the previous decision ID. Unchecked findings remain outstanding. A
 supplier's PDF/code/compilation declaration remains unverified.
+
+### Bringing an older local review into the project
+
+In **Project**, choose **Import completed review**, select the original ZIP saved
+by **Finish review**, choose its project work, sign in, and press **Send to
+project**. A newly prepared local completion also offers **Send to project**
+beside its download. No hashes, internal IDs, Git commands or manual finding
+re-entry are required. Merely choosing a ZIP previews it; sending is explicit.
+
+The browser and service validate the completed declaration, exact files and
+retained task/response history independently. The printed source and original
+task's LilyPond must match the selected current project work. The old rendering
+may differ and remains historical evidence. Missing lineage, stale code,
+conflicting completion identity or the wrong work is rejected without changing
+the local review. Use the original completed-review ZIP; an ordinary recovery
+ZIP or a historical declaration without its matching files is insufficient.
+
+Task-backed completions become proposals with fresh shared finding IDs and no
+inherited approvals. Original IDs, observations, scope, typed names and local
+decisions remain linked evidence, with the authenticated uploader recorded
+separately. Follow-up notes and original clarification states remain available
+in the proposal's history. An unchanged review without correction-task history becomes a
+coverage report; an explicit whole/partial clean declaration does not close
+other findings. Neither path changes canonical files or `verified_by`.
+
+The receipt links the resulting proposal or report and retains an exact original
+ZIP download. It can be reopened in another browser without the old local task
+store. A lost acknowledgment uses the same durable retry request, so retrying
+does not duplicate the proposal. The open local workspace and unsent findings
+remain in place until the contributor explicitly opens a project candidate.
+Imports need complete original context; older unlocated follow-ups without
+their original annotation files are rejected. Generated shared packages are
+bounded to 512 MiB in total, and a failed import rolls back all shared writes.
 
 ### Trusted task instructions
 
@@ -309,6 +344,13 @@ validation, source mismatch, stale proposals, author spoofing, unauthorized
 verification/application, and committed-candidate checks in disposable Git
 repositories. The browser acceptance runner separately exercises the actual
 built UI on an isolated Pages-style path prefix.
+
+With the existing Playwright/browser setup, run just the legacy-completion UI
+flow with `node scripts/browser-tests.mjs --completion-import-only`. It uses
+the frozen older exporter, a disposable service/database and fresh browser
+contexts. It covers explicit authenticated import, wrong-work rejection,
+lost-acknowledgment retry, original evidence download, preserved local work and
+fresh-browser proposal/report receipts.
 
 The first version is intended for this small project's bounded work units.
 Package limits match the existing browser contract (256 MiB ZIP, 100 MiB file,

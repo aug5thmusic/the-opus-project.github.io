@@ -1,9 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createCurrentWorkReader, matchingReportDraft, proposalApplications, proposalFindingState, proposalReportIdentity, reportFindingSelection} from '../shared-ui.js';
+import {createCurrentWorkReader, matchingReportDraft, proposalApplications, proposalFindingState, proposalReportIdentity, reportFindingSelection, completionImportDestination} from '../shared-ui.js';
 
 const deferred = () => { let resolve, reject; const promise = new Promise((ok, fail) => { resolve = ok; reject = fail; }); return {promise, resolve, reject}; };
 const work = slug => ({workId: slug, work: {slug}, current: {snapshotId: `snapshot-${slug}`}});
+
+test('completion import receipts route changed candidates to review and unchanged contributions to their report', () => {
+  const imported = {kind: 'completion-import', id: 'import-one', workId: 'work-one', reportId: 'report-one', proposalId: 'proposal-one'};
+  assert.deepEqual(completionImportDestination(imported), {kind: 'proposal', id: 'proposal-one'});
+  assert.deepEqual(completionImportDestination({...imported, proposalId: null}), {kind: 'report', id: 'report-one'});
+  for (const malformed of [{...imported, id: null}, {...imported, kind: 'proposal'}, {...imported, workId: ''}, {...imported, proposalId: null, reportId: null}]) assert.throws(() => completionImportDestination(malformed));
+});
 
 test('partial application never labels an entire proposal applied or transfers application to another finding', () => {
   const record = {findings: [{id: 'one'}, {id: 'two', decision: {state: 'looks_correct'}}, {id: 'three', decision: {state: 'needs_correction'}}], applied: [{findingIds: ['one']}, {findingIds: ['one', 'unrelated']}]};

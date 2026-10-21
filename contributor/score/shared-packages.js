@@ -3,7 +3,7 @@
 import {clone,identify,newReview,validateReview,sha256,roles} from './model.js';
 import {makeRecovery,makePackage,zipFiles} from './export.js';
 import {makeTask,finalizeTask,localTaskDelivery,readPackage,readResponse,responseRevision,strictJSON,json,LIMITS,promptFor} from './workflow.js';
-import {workspaceSeed} from './returned.js';
+import {workspaceSeed,restoreReturnedBackup} from './returned.js';
 import {canonical} from './completion-model.js';
 import {retain,retained} from './handoff-store.js';
 
@@ -12,6 +12,7 @@ const digest=value=>typeof value==='string'&&/^[a-f0-9]{64}$/.test(value);
 const fail=message=>{throw new Error(message);};
 const checkedPath=id=>{if(!safeId(id))fail('The shared record identifier is invalid.');return encodeURIComponent(id);};
 const parse=async blob=>{if(!blob||blob.size>LIMITS.json)fail('The task metadata is missing or too large.');return strictJSON(await blob.text());};
+const completionInspections=new WeakMap();
 
 export async function blobBase64(blob){
   if(!blob||blob.size>LIMITS.zip)fail('The package exceeds the supported size limit.');
@@ -19,6 +20,37 @@ export async function blobBase64(blob){
   // Multiples of three allow independently encoded chunks without middle padding.
   for(let offset=0;offset<bytes.length;offset+=24576)encoded+=btoa(String.fromCharCode(...bytes.subarray(offset,offset+24576)));
   return encoded;
+}
+
+// A local completion contributes exact evidence, never imported approval or
+// instructions. Keep its original ZIP unchanged for the authenticated service
+// to validate independently; never reconstruct missing lineage from prose.
+export async function inspectLocalCompletion(blob,inspectPdf){
+  const parsed=await readPackage(blob,inspectPdf),manifest=parsed.manifest,bundle=parsed.completionBundle;
+  if(manifest.kind!=='completed-review-handoff'||typeof manifest.completionId!=='string'||!bundle)fail('Choose the completed-review ZIP saved by Finish review. A recovery package or historical declaration alone is not a completed contribution.');
+  const completion=bundle.records.find(record=>record.id===manifest.completionId);
+  if(!completion||completion.revision.id!==bundle.revisionId||completion.revision.snapshotId!==parsed.review.snapshotId||completion.hashes.annotations!==await sha256(await parsed.payloads.get('annotations.json').arrayBuffer())||roles.some(role=>completion.hashes[role]!==parsed.review.files[role].sha256))fail('The completion does not describe the exact files in this package. Keep the original completed-review ZIP.');
+  let restored;
+  try{restored=await restoreReturnedBackup(parsed,inspectPdf);}catch{fail('The completion’s original task and response evidence is missing or invalid. Keep the unchanged completed-review ZIP.');}
+  if(Boolean(completion.evidence.returned)!==Boolean(restored))fail('The completion is missing its original task and response evidence.');
+  let issued=null,entry=null;
+  if(restored){
+    issued=await hydrateTaskPackage(await zipFiles(restored.issued.payloads),inspectPdf,{expectedId:completion.revision.taskId});
+    entry=restored.entry;
+    if(entry.id!==completion.revision.responseId||issued.id!==completion.revision.taskId||issued.task.baseline.sourceSha256!==parsed.review.files.source.sha256||entry.taskId!==issued.id)fail('The completion lineage does not match its original task and returned response.');
+  }
+  const originalPackageSha256=await sha256(await blob.arrayBuffer());
+  const inspected={blob,originalPackageSha256,completion:clone(completion),parsed,issued,entry,
+    candidate:{snapshotId:parsed.review.snapshotId,files:parsed.review.files},baseline:issued?clone(issued.task.baseline):null,
+    codeChanged:issued?issued.task.baseline.codeSha256!==parsed.review.files.ly.sha256:null,
+    summary:{scope:completion.scope,scopeNote:completion.scopeNote,reviewer:completion.reviewer,createdAt:completion.createdAt,findings:completion.totals.all,unresolved:completion.totals.unresolved,hasReturnedEvidence:Boolean(issued),sourceName:parsed.files.source.name,renderedName:parsed.files.rendered.name,lyName:parsed.files.ly.name}};
+  completionInspections.set(inspected,blob);return inspected;
+}
+
+export async function prepareLocalCompletionImport(blobOrInspected,inspectPdf,{requestId=crypto.randomUUID()}={}){
+  if(!safeId(requestId))fail('The upload request identifier is invalid.');
+  const inspected=completionInspections.has(blobOrInspected)?blobOrInspected:await inspectLocalCompletion(blobOrInspected,inspectPdf),blob=completionInspections.get(inspected);
+  return {...inspected,submit:{requestId,package:await blobBase64(blob)}};
 }
 
 async function verifiedAsset(client,info,role){

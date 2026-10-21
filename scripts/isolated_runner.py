@@ -214,6 +214,22 @@ def _outputs(raw, operation, *, max_pages=40):
     return files, metadata
 
 
+def _container_create_command(docker, image_id, directory, container, operation):
+    """One production policy; there is deliberately no network-mode argument."""
+    if operation not in ('compile', 'render', 'canary'):
+        raise IsolatedRunError('Unsupported operation.')
+    return [*docker, 'create', '--pull=never', '--name', container,
+            '--network', 'none', '--read-only', '--user', '65532:65532',
+            '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges',
+            '--pids-limit', '64', '--memory', '512m', '--memory-swap', '512m', '--cpus', '1',
+            '--ulimit', 'nofile=128:128', '--ulimit', 'core=0:0',
+            '--ipc', 'none', '--log-driver', 'none', '--stop-timeout', '1',
+            '--tmpfs', '/work:rw,noexec,nosuid,nodev,size=201326592,mode=0700,uid=65532,gid=65532',
+            '--mount', f'type=bind,source={directory},target=/input,readonly',
+            '--workdir', '/work', '--env', 'HOME=/work/home', '--env', 'TMPDIR=/work/tmp',
+            image_id, operation]
+
+
 def _run(operation, inputs, job, *, timeout_seconds=120):
     if operation not in ('compile', 'render', 'canary') or type(timeout_seconds) is not int or not 1 <= timeout_seconds <= 120:
         raise IsolatedRunError('Unsupported operation or time limit.')
@@ -232,16 +248,7 @@ def _run(operation, inputs, job, *, timeout_seconds=120):
         if ',' in directory or '\n' in directory:
             raise IsolatedRunError('Unsupported temporary input path.')
         container = 'opus-isolated-'+uuid.uuid4().hex
-        create = [*docker, 'create', '--pull=never', '--name', container,
-                  '--network', 'none', '--read-only', '--user', '65532:65532',
-                  '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges',
-                  '--pids-limit', '64', '--memory', '512m', '--memory-swap', '512m', '--cpus', '1',
-                  '--ulimit', 'nofile=128:128', '--ulimit', 'core=0:0',
-                  '--ipc', 'none', '--log-driver', 'none', '--stop-timeout', '1',
-                  '--tmpfs', '/work:rw,noexec,nosuid,nodev,size=201326592,mode=0700,uid=65532,gid=65532',
-                  '--mount', f'type=bind,source={directory},target=/input,readonly',
-                  '--workdir', '/work', '--env', 'HOME=/work/home', '--env', 'TMPDIR=/work/tmp',
-                  runtime['imageId'], operation]
+        create = _container_create_command(docker, runtime['imageId'], directory, container, operation)
         created = False
         try:
             code, _, err = _bounded(create, env=env)
