@@ -253,11 +253,13 @@ button.icon-close svg{display:block;width:16px;height:16px;fill:none;stroke:curr
 #historicalOverlay{position:absolute;inset:0;pointer-events:none}
 .corrections-open>header,.corrections-open>.toolbar,.corrections-open #comparisonControl{display:none!important}
 .correction-header{flex:none;display:flex;align-items:center;gap:12px;padding:6px 14px;background:#fff;border-bottom:1px solid var(--line);z-index:8;min-height:45px;height:45px}
-.correction-header #correctionErrorReceipt{flex:0 1 90px;font-size:12px;line-height:14px}
+.correction-receipts{padding:4px 0;border:0}
+.correction-receipts a{display:block;overflow-wrap:anywhere;margin:8px 0}
 .correction-header button,.correction-header summary{font-size:14px;line-height:20px;padding:5px 10px;white-space:nowrap}
 .correction-header #correctionBack{margin-left:auto;border:0;background:transparent;color:#40665c}
 .corrections-open #notices{flex:1;min-width:0;height:30px;min-height:0;max-height:30px;padding:0;border:0;background:transparent;font-size:12px}
 .corrections-open #noticeCopy{max-height:30px;overflow:auto;line-height:15px}
+.corrections-open #notices #message,.corrections-open #notices #storageProblem{font-size:12px;line-height:15px}
 .corrections-open #notices #dismissMessage{height:22px;min-width:22px;width:22px}
 .correction-comparison{flex:none;display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:8px 20px;position:relative;z-index:5;padding:8px 16px;border-bottom:1px solid #adc9b8;background:#f5faf5}
 .correction-navigation{display:flex;align-items:center;gap:12px;flex:none}
@@ -333,6 +335,7 @@ button.icon-close svg{display:block;width:16px;height:16px;fill:none;stroke:curr
 #correctionFiles #sharedProposalPanel{border:0}
 #correctionFiles .dialog-head{position:sticky;top:-25px;background:white;z-index:1;padding-bottom:10px}
 .corrections-open.corrections-annotating>.toolbar{display:flex!important;flex-wrap:wrap;padding:5px 12px}
+.corrections-open.corrections-annotating #toggleComments{display:inline-flex}
 .corrections-open #doneNext{display:none}
 .corrections-open #saveFinding{background:white;color:#315c50}
 .corrections-annotating .correction-comparison:not(.response-open){padding-block:0;border:0}
@@ -348,22 +351,20 @@ button.icon-close svg{display:block;width:16px;height:16px;fill:none;stroke:curr
 }
 @media(max-width:700px){
  .correction-header{padding:4px 10px;gap:6px}
- .correction-header{display:grid;grid-template-columns:minmax(140px,1fr) auto auto;grid-template-rows:30px 22px;gap:2px 6px;height:auto}
+ .correction-header{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;grid-template-rows:30px 30px;gap:2px 6px;height:auto}
  .correction-navigation{display:contents}
- .correction-navigation>.problem-picker{justify-self:start;grid-column:1;grid-row:1}
- #correctionProgress{grid-column:1;grid-row:2;font-size:12px;min-width:140px}
- .correction-header #correctionBack{grid-column:2;grid-row:1}
- .correction-header #correctionMore{grid-column:3;grid-row:1}
- .correction-header #notices{grid-column:2/4;grid-row:2;height:22px;max-height:22px;width:auto;font-size:11px}
- .corrections-open #noticeCopy{max-height:22px;line-height:11px}
- #correctionErrorReceipt{grid-column:2/4;grid-row:2;background:white;z-index:1;font-size:12px}
+ .correction-navigation>.problem-picker{justify-self:start;grid-column:1/3;grid-row:1}
+ #correctionProgress{grid-column:1;grid-row:2;font-size:12px;min-width:140px;justify-self:start}
+ .correction-header #correctionBack{grid-column:3;grid-row:1}
+ .correction-header #correctionMore{grid-column:4;grid-row:1}
+ .correction-header #notices{grid-column:2/-1;grid-row:2;height:30px;max-height:30px;width:auto}
  .correction-header button,.correction-header summary{font-size:13px;padding:4px 6px}
  .correction-comparison{grid-template-columns:minmax(0,1fr);gap:7px;padding:5px 10px 7px}
  .correction-navigation{gap:8px}
  .correction-navigation>.problem-picker{padding:3px 6px}
- .correction-report{display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px 8px}
+ .correction-report{display:grid;grid-template-columns:auto minmax(0,1fr);gap:2px 8px}
  .correction-copy{grid-column:1/-1;grid-row:2}
- .correction-state{justify-self:start}
+ .correction-state{justify-self:start;padding-block:1px}
  .correction-report>.review-disclosure{justify-self:end}
  .correction-report .review-disclosure>summary{font-size:13px;padding:0}
  #correctionOriginal{font-size:15px;line-height:20px;max-height:80px}

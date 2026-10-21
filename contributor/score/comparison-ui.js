@@ -24,6 +24,10 @@ export function installComparison(api){
   function own(node,parent){parent.append(node);owned.push(node);return node;}
   function closeMenus(){for(const item of [refs.more,refs.aiDetails,refs.sourceOptions,refs.afterOptions])if(item)item.open=false;}
   function notify(text,error=false){refs.notice.textContent=text;refs.notice.dataset.error=String(error);api.message(text,error,true);}
+  function clearReceipt(){
+    // Only clear our current acknowledgement, never an unrelated failure.
+    if(refs.receipt&&$('message').contains(refs.receipt))api.message('',false,true);
+  }
   function controls(){
     if(!adapter)return;
     const disabled=pending||initializing||api.status().busy;root.setAttribute('aria-busy',String(disabled));
@@ -32,6 +36,7 @@ export function installComparison(api){
     refs.skip.hidden=index>=adapter.findings().length-1;
     refs.approve.disabled=disabled||!viewReady||!adapter.canApprove();refs.locate.disabled=disabled||!viewReady||!adapter.candidate;refs.package.disabled=disabled||!adapter.candidate;refs.report.disabled=disabled||!adapter.candidate;
     document.body.classList.toggle('corrections-annotating',Boolean(api.status().active||api.status().prepared));
+    if(api.status().active||api.status().prepared)clearReceipt();
     if(refs.submit)refs.submit.disabled=disabled||!api.status().active;
     refs.back.textContent=compact.matches?(adapter.shared?'← Project':'← Workspace'):(adapter.shared?'Back to project':'Back to workspace');refs.back.setAttribute('aria-label',adapter.shared?'Back to project':'Back to workspace');
     for(const kind of ['source','rendered']){
@@ -180,19 +185,25 @@ export function installComparison(api){
     refs.originalVersion=button('Show the earlier version','showOriginalVersion',async()=>{remember();await displayLeft('original');});source.body.append(refs.originalVersion);
     const original=disclosure('Original marked context','originalReportedContext','correction-context');refs.earlier=element('p');refs.context=element('div');original.body.append(refs.earlier,refs.context);source.body.append(original.details);
     const after=secondary('rendered');refs.afterOptions=after.details;refs.afterPageSummary=after.summary;
-    refs.report=button('Report another error','reportAnotherError',()=>{closeMenus();document.body.classList.add('corrections-annotating');$('newFinding').click();},false);after.tools.prepend(refs.report);
+    refs.report=button('Report another error','reportAnotherError',()=>{closeMenus();clearReceipt();document.body.classList.add('corrections-annotating');$('newFinding').click();},false);after.tools.prepend(refs.report);
     refs.submit=null;
     $('saveFinding').textContent='Save locally';
     if(next.submitFinding){
       refs.submit=own(button('Submit error','submitCorrectionError',async()=>{
         await api.flush();const id=api.status().active;if(!id)throw new Error('Type a comment or mark the new error before submitting.');
+        clearReceipt();const finding=api.capture().review.findings.find(f=>f.id===id);
         const receipt=await adapter.submitFinding(id);if(!receipt?.id)throw new Error('Submission was not confirmed. Your draft is kept; retry safely.');
         await api.finishFinding();
-        refs.receipt.href=receipt.url;refs.receipt.hidden=false;refs.focusAfter=refs.receipt;notify('Error received by the project. Open receipt for the saved report.');
+        if(!refs.receipts.querySelector(`[data-receipt-id="${CSS.escape(receipt.id)}"]`)){
+          const saved=element('a',`Error #${finding.number}: ${finding.comment||'Marked passage'}`);saved.href=receipt.url;saved.dataset.receiptId=receipt.id;refs.receipts.append(saved);
+        }
+        refs.receipts.hidden=false;notify(`Error #${finding.number} received by the project. `);
+        // A receipt is part of this acknowledgement, not an independent banner.
+        // message() replaces it on the next notice (including non-review errors).
+        refs.receipt.href=receipt.url;refs.receipt.textContent='Receipt';refs.receipt.setAttribute('aria-label',`Project receipt for error #${finding.number}`);$('message').append(refs.receipt);refs.focusAfter=refs.receipt;
       }),$('editor').querySelector('.editor-actions'));refs.submit.className='primary';
-      refs.receipt=element('a','Received · Receipt');refs.receipt.id='correctionErrorReceipt';refs.receipt.setAttribute('aria-label','Error received by the project. Open submission receipt');refs.receipt.hidden=true;
-      // Receipt is directly available beside the status, not only in More.
-      header.insertBefore(refs.receipt,refs.back);
+      refs.receipt=element('a');refs.receipt.id='correctionErrorReceipt';
+      refs.receipts=element('details',null,'correction-receipts');refs.receipts.id='correctionReceipts';refs.receipts.append(element('summary','Submitted errors'));refs.receipts.hidden=true;more.body.append(refs.receipts);
     }
     refs.alignment=element('p');refs.alignment.id='correctionAlignment';refs.locate=button('Remember this passage','locateCorrectedPassage',async()=>{const f=selected(),location=bookmark(f.id,api.capture().review,api.viewPosition('rendered'));if(await adapter.saveLocation(f.id,location)!==true)throw new Error('The passage was not confirmed saved. Your current view is kept; please retry.');refs.alignment.textContent='This passage is remembered for this AI revision.';closeMenus();notify('Passage remembered. No finding or decision was created.');});
     after.body.append(refs.alignment,element('p','Find the passage in the AI revision, then remember this view.'),refs.locate);

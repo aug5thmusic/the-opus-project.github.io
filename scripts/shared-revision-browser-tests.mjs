@@ -5,6 +5,7 @@ import {mkdir,writeFile,readFile} from 'node:fs/promises';
 import {resolve} from 'node:path';
 import {createHash} from 'node:crypto';
 import {fixtureBlob} from '../contributor/score/qa/fixtures.js';
+import {checkReceiptFollowups} from './receipt-browser-checks.mjs';
 
 const chooseProblem=async(page,index)=>{await page.locator('#sharedProposalFinding').click();await page.locator(`[data-problem-index="${index}"]`).click();await page.waitForFunction(()=>document.querySelector('#correctionComparison').getAttribute('aria-busy')==='false');};
 const responseEditor=async page=>{if(!await page.locator('#correctionResponse').isVisible())await page.locator('#sharedStillCorrection').click();};
@@ -170,6 +171,7 @@ export async function runSharedRevisions({browser,serve,evidence,root}){
     const samePdfCommit=git('rev-parse','HEAD'),samePdfId=await canonical(david),samePdf=await proposal(samePdfId);
     check(samePdfId!==latestId&&samePdf.candidate.renderSha256===latest.candidate.renderSha256&&samePdf.candidate.canonicalRepositoryRevision===samePdfCommit&&samePdfCommit!==mergedCommit,'same PDF at a new canonical commit receives its own review receipt');
     check(samePdf.findings.every(item=>!item.decision),'same-byte canonical recapture does not inherit earlier decisions');
+    await checkReceiptFollowups({actor,proposalId:samePdfId,state,api,evidence,check});
     check(!log.some(line=>line.startsWith('BROWSER ERROR')),'revision workflow completed without uncaught browser errors');
     await iris.screenshot({path:resolve(evidence,'rendering-revision-complete.png'),fullPage:true});
     return {name:'changed code, rendering revisions and candidate reports',assertions};

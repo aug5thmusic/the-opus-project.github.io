@@ -40,7 +40,7 @@ function dismissMessage(){clearTimeout(messageTimer);$('message').hidden=true;$(
 function message(text,error=false,replace=false){
   // Routine confirmations expire; an unrelated action must not erase an error.
   if(!replace&&!error&&!busy&&!$('message').hidden&&$('message').dataset.error==='true')return;
-  clearTimeout(messageTimer);$('message').textContent=text;$('message').hidden=!text;$('message').dataset.error=String(error);noticeLayout();
+  clearTimeout(messageTimer);$('message').textContent=text;$('message').hidden=!text;$('message').dataset.error=String(error);$('noticeCopy').scrollTop=0;noticeLayout();
   if(text&&!error){const expire=()=>{if(busy){messageTimer=setTimeout(expire,1000);return;}dismissMessage();};messageTimer=setTimeout(expire,3500);}
 }
 function storageStatus(text,problem=''){
