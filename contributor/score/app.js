@@ -9,11 +9,13 @@ import {mergeCompletions,exactReview} from './completion-model.js';
 import {addCompletionHistory} from './completion.js';
 import {installCompletion} from './completion-ui.js';
 import {installShared} from './shared-ui.js';
+import {installComparison} from './comparison-ui.js';
 pdfjs.GlobalWorkerOptions.workerSrc='./vendor/pdf.worker.mjs';
 const $=id=>document.getElementById(id);
 let review=null, files=null, active=null, focused=null, mode='navigate', gesture=null, undo=[],redo=[], busy=false,revision=0,dirty=false;
 let persistedRevision=null,saveConflict=false,recoveryStamp=null,recoveryJob=null,exportJob=null;
 let returned=null,comparison=null;
+let leftDisplay=null;
 let prepared=false,pendingReportedId=null,composing=false;
 const dialogOpen=()=>Boolean(document.querySelector('dialog[open]'));
 const canEdit=()=>Boolean(review&&!busy&&!comparison&&!dialogOpen());
@@ -114,6 +116,7 @@ async function openSnapshot(nextFiles=null,targetId=null,imported=null,seed=null
     // A completion import must pass its global immutable-ID checks and CAS
     // before replacing the visible ordinary review, just like returned seeds.
     if(bundle&&!seed)stored=await operations.putSaved({id:snapshotId,review:nextReview,files:nextFiles,returned:nextReturned,revisionId:nextRevisionId,completions:nextCompletions},stored?(stored.storageRevision??0):null);
+    await clearLeftDisplay();
     if(comparison){views.rendered.doc=comparison.current;await comparison.previous.destroy();comparison=null;}
     for(const v of Object.values(views)){v.serial++;v.task?.cancel();if(v.task)try{await v.task.promise;}catch{}await v.doc?.destroy();}
     invalidateExport();files=nextFiles;review=nextReview;returned=clone(nextReturned);revision++;dirty=restoredInstructions||(seed||bundle?false:Boolean(imported)||!stored);persistedRevision=stored?(stored.storageRevision??0):null;
@@ -146,7 +149,55 @@ async function renderPage(v){
   if(v.kind==='rendered'){$('overlay').width=canvas.width;$('overlay').height=canvas.height;$('overlay').style.width=canvas.style.width;$('overlay').style.height=canvas.style.height;}
   v.task=page.render({canvasContext:canvas.getContext('2d'),viewport,transform:[dpr,0,0,dpr,0,0]});
   try{await v.task.promise;}catch(e){if(e.name!=='RenderingCancelledException')throw e;return;}
-  if(serial!==v.serial)return;v.viewport=viewport;v.dpr=dpr;$(`${v.kind}Paper`).setAttribute('aria-busy','false');drawOverlay();
+  if(serial!==v.serial)return;v.viewport=viewport;v.dpr=dpr;$(`${v.kind}Paper`).setAttribute('aria-busy','false');drawOverlay();drawHistorical();
+  if(v.position){const [x,y]=viewport.convertToViewportPoint(...v.position.point),scroll=$(`${v.kind}Scroll`);scroll.scrollTo(x+10-scroll.clientWidth/2,y+10-scroll.clientHeight/2);delete v.position;}
+}
+function viewPosition(kind){
+  const v=views[kind],scroll=$(`${kind}Scroll`);if(!v.viewport)return null;
+  const point=v.viewport.convertToPdfPoint(Math.max(0,Math.min(v.viewport.width,scroll.scrollLeft+scroll.clientWidth/2-10)),Math.max(0,Math.min(v.viewport.height,scroll.scrollTop+scroll.clientHeight/2-10)));
+  return {page:v.page,point,zoom:$(`${kind}Zoom`).value==='fit'?'fit':Number($(`${kind}Zoom`).value)};
+}
+async function positionView(kind,position){
+  const v=views[kind];if(!v.doc)return;
+  v.page=Math.max(1,Math.min(v.doc.numPages,position?.page??1));
+  $(`${kind}Page`).value=v.page;$(`${kind}Page`).max=v.doc.numPages;$(`${kind}Count`).textContent=`/ ${v.doc.numPages}`;
+  if(position?.zoom)$(`${kind}Zoom`).value=String(position.zoom);
+  if(position?.point)v.position=position;else $(`${kind}Scroll`).scrollTo(0,0);
+  await renderPage(v);
+}
+async function clearLeftDisplay(){
+  if(!leftDisplay)return;
+  const display=leftDisplay;leftDisplay=null;
+  views.source.serial++;views.source.task?.cancel();if(views.source.task)try{await views.source.task.promise;}catch{}
+  views.source.doc=display.source;
+  for(const doc of display.documents.values())await doc.destroy();
+  $('historicalOverlay').hidden=true;
+}
+async function showHistorical(asset,position,showOthers=false){
+  // This changes display documents only. files.source and review.files never change.
+  if(!leftDisplay)leftDisplay={source:views.source.doc,documents:new Map(),asset:null};
+  const display=leftDisplay,v=views.source;
+  let doc=display.source;
+  if(asset){
+    doc=display.documents.get(asset.sha256);
+    if(!doc){doc=await openPdf(asset.blob);if(leftDisplay!==display){await doc.destroy();return;}display.documents.set(asset.sha256,doc);}
+  }
+  v.serial++;v.task?.cancel();if(v.task)try{await v.task.promise;}catch{}
+  if(leftDisplay!==display)return;
+  v.doc=doc;display.asset=asset;display.showOthers=showOthers;
+  $('sourceViewer').dataset.renderSha256=asset?.sha256??review.files.source.sha256;
+  await positionView('source',position);
+}
+function drawHistorical(){
+  const canvas=$('historicalOverlay'),v=views.source,asset=leftDisplay?.asset;
+  canvas.hidden=!asset;if(!asset||!v.viewport)return;
+  canvas.width=$('sourceCanvas').width;canvas.height=$('sourceCanvas').height;canvas.style.width=$('sourceCanvas').style.width;canvas.style.height=$('sourceCanvas').style.height;
+  const ctx=canvas.getContext('2d');ctx.setTransform(v.dpr,0,0,v.dpr,0,0);
+  const selected=asset.marks.filter(f=>f.id===asset.selectedId);
+  if(leftDisplay.showOthers){ctx.globalAlpha=.3;paint(ctx,v.viewport,asset.marks.filter(f=>f.id!==asset.selectedId),v.page);ctx.globalAlpha=1;}
+  paint(ctx,v.viewport,selected,v.page);
+  for(const f of selected)if(f.page===v.page&&f.bounds){const [x0,y0,x1,y1]=v.viewport.convertToViewportRectangle(f.bounds);ctx.strokeStyle='#123f39';ctx.lineWidth=2;ctx.setLineDash([5,3]);ctx.strokeRect(Math.min(x0,x1)-5,Math.min(y0,y1)-5,Math.abs(x1-x0)+10,Math.abs(y1-y0)+10);}
+  canvas.dataset.findingIds=(leftDisplay.showOthers?asset.marks:selected).filter(f=>f.page===v.page).map(f=>f.id).join(',');
 }
 function drawOverlay(){const v=views.rendered,c=$('overlay'),ctx=c.getContext('2d');ctx.setTransform(1,0,0,1,0,0);ctx.clearRect(0,0,c.width,c.height);if(comparison||!review||!v.viewport||$('hide').checked)return;ctx.setTransform(v.dpr,0,0,v.dpr,0,0);paint(ctx,v.viewport,focused?review.findings.filter(f=>f.id===focused):review.findings,v.page,gesture?.stroke);}
 function current(){return review?.findings.find(f=>f.id===active);}
@@ -311,7 +362,7 @@ $('closeShortcuts').onclick=()=>$('shortcutsDialog').close();
 for(const dialog of document.querySelectorAll('dialog'))new MutationObserver(()=>{if(dialog.open)cancelGesture();controls();}).observe(dialog,{attributes:true,attributeFilter:['open']});
 for(const kind of ['source','rendered']){
   const v=views[kind];const go=guard(async n=>{if(!v.doc)return;v.page=Math.max(1,Math.min(v.doc.numPages,Math.round(Number(n)||1)));$(`${kind}Page`).value=v.page;$(`${kind}Scroll`).scrollTo(0,0);await renderPage(v);});
-  $(`${kind}Page`).onchange=e=>go(e.target.value);$(`${kind}Zoom`).onchange=guard(()=>renderPage(v));
+  $(`${kind}Page`).onchange=e=>go(e.target.value);$(`${kind}Zoom`).onchange=guard(()=>{const p=viewPosition(kind);if(p)v.position=p;return renderPage(v);});
   document.querySelectorAll(`[data-kind="${kind}"]`).forEach(b=>b.onclick=()=>go(v.page+(b.dataset.action==='next'?1:-1)));
 }
 let resizeTimer;const resizeObserver=new ResizeObserver(()=>{clearTimeout(resizeTimer);resizeTimer=setTimeout(()=>{setComments(document.body.classList.contains('comments-open'));for(const v of Object.values(views)){const width=$(`${v.kind}Scroll`).clientWidth;if(width&&width!==v.observedWidth){v.observedWidth=width;if($(`${v.kind}Zoom`).value==='fit'||!v.viewport)guard(()=>renderPage(v))();}}},150);});for(const kind of ['source','rendered'])resizeObserver.observe($(`${kind}Scroll`));
@@ -385,6 +436,8 @@ export const operations={makeRecovery,makePackage,zipFiles,download,putSaved};
 export {saveNow};
 export const sessionStatus=()=>({...stamp(),dirty,busy,persistedRevision,saveConflict,unprotected:unprotectedWork(),recoveryStamp:recoveryStamp&&{...recoveryStamp},active,focused,prepared,mode,gesture:Boolean(gesture),undoLength:undo.length,exporting:Boolean(exportJob)});
 const appApi={
+  viewPosition,positionView,showHistorical,
+  leaveComparison:async()=>{await clearLeftDisplay();await positionView('source',{page:1,zoom:'fit'});appApi.corrections.close();},
   capture:()=>({review:clone(review),files,returned:clone(returned),active,doc:comparison?.current??views.rendered.doc,comparison:Boolean(comparison),stamp:stamp(),revisionId,workspaceId:recordKey(),persistedRevision,completions:clone(completions)}),matches:matchesStamp,status:sessionStatus,message,
   openImported:parsed=>openSnapshot(parsed.files,null,parsed.review,null,false,parsed.completionBundle),
   openFiles:nextFiles=>openSnapshot(nextFiles),
@@ -418,6 +471,8 @@ const appApi={
   },
   packageMaker:(...args)=>operations.makePackage(...args),zip:(...args)=>operations.zipFiles(...args),download:(...args)=>operations.download(...args)
 };
+appApi.corrections=installComparison(appApi);
+export const corrections=appApi.corrections;
 export const handoff=installHandoff(appApi);
 export const completion=installCompletion(appApi);
 export const shared=installShared(appApi);

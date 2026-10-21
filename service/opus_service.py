@@ -789,12 +789,14 @@ class Store:
         task = self.task_delivery(db, self.record(db, proposal["taskId"], "task"))
         events = self.records(db, proposal["workId"], "decision")
         events = [e for e in events if e["proposalId"] == proposal["id"]]
+        locations = [e for e in self.records(db, proposal["workId"], "correction-location") if e["proposalId"] == proposal["id"]]
         applications = [a for a in self.records(db, proposal["workId"], "application") if a["proposalId"] == proposal["id"]]
         findings = []
         for finding in task["task"]["findings"]:
             history = [e for e in events if e["findingId"] == finding["id"]]
             applied = [a for a in applications if finding["id"] in a["findingIds"]]
-            findings.append({**finding, "decisionVersion": len(history), "decisions": history, "decision": history[-1] if history else None, "applications": applied, "applied": bool(applied)})
+            positions = [e for e in locations if e["findingId"] == finding["id"]]
+            findings.append({**finding, "decisionVersion": len(history), "decisions": history, "decision": history[-1] if history else None, "applications": applied, "applied": bool(applied), "locationVersion": len(positions), "location": positions[-1] if positions else None})
         current = current or self.current(db, proposal["workId"])
         root_id = proposal.get("rootProposalId", proposal["id"])
         family = [p for p in self.records(db, proposal["workId"], "proposal") if p.get("rootProposalId", p["id"]) == root_id]
@@ -805,6 +807,29 @@ class Store:
                 "candidateCurrent": self.candidate_revision(db, proposal), "revisions": revisions, "latestRenderingId": revisions[-1]["id"],
                 "findings": findings, "stale": current["snapshotId"] != task["baseline"]["snapshotId"], "applied": applications,
                 "appliedFindingIds": applied_ids, "appliedCount": len(applied_ids), "findingCount": len(findings), "task": task["task"], "current": current}
+
+    def locate_correction(self, ident, body, user):
+        require(set(body) <= {"requestId", "findingId", "position", "expectedVersion", "candidate"}, "Location metadata contains unsupported fields.")
+        p = body.get("position")
+        require(isinstance(p, dict) and set(p) == {"page", "point", "zoom"}, "A PDF viewing position is required.")
+        require(type(p["page"]) is int and 1 <= p["page"] <= 100000, "Invalid location page.")
+        require(isinstance(p["point"], list) and len(p["point"]) == 2 and all(type(n) in (int, float) and -10000000 <= n <= 10000000 for n in p["point"]), "Invalid PDF point.")
+        require(p["zoom"] == "fit" or type(p["zoom"]) in (int, float) and p["zoom"] in (.75, 1, 1.5, 2), "Invalid viewing zoom.")
+        require(type(body.get("expectedVersion")) is int and body["expectedVersion"] >= 0, "The displayed location version is required.")
+        with self.db(write=True) as db:
+            def operation():
+                proposal = self.record(db, ident, "proposal")
+                require(proposal["candidate"].get("renderSha256"), "An updated rendering is required before locating a corrected passage.", 409)
+                candidate = {key: proposal["candidate"][key] for key in ("snapshotId", "codeSha256", "renderSha256")}
+                require(body.get("candidate") == candidate, "This location belongs to a different candidate revision.", 409)
+                view = self.proposal_view(db, proposal)
+                finding = next((f for f in view["findings"] if f["id"] == body.get("findingId")), None)
+                require(finding, "This finding is not in the proposal.", 404)
+                require(finding["locationVersion"] == body["expectedVersion"], "Another browser saved a location. Reload before replacing it.", 409)
+                event = {"id": str(uuid.uuid4()), "version": 1, "createdAt": now(), "author": user, "workId": proposal["workId"], "proposalId": ident, "findingId": finding["id"], "candidate": candidate, "position": p}
+                self.insert(db, "correction-location", proposal["workId"], event)
+                return event
+            return self.idempotent(db, user, body.get("requestId"), body, operation, f"locations:{ident}")
 
     def decide(self, ident, body, user):
         require(set(body) <= {"requestId", "findingId", "state", "explanation", "expectedVersion"}, "Review identity and revision are assigned by the service.", 403)
@@ -1248,7 +1273,7 @@ class Handler(BaseHTTPRequestHandler):
                 body = self.read_body()
                 require(isinstance(body, dict), "Invalid submission.")
                 return self.send(200, store.submit_task(body, user) if path.endswith("tasks") else store.submit_proposal(body, user))
-            match = re.fullmatch(r"/api/(reports|tasks|proposals|completion-imports)/([A-Za-z0-9_-]+)(?:/(package|handoff|decisions|renderings))?", path)
+            match = re.fullmatch(r"/api/(reports|tasks|proposals|completion-imports)/([A-Za-z0-9_-]+)(?:/(package|handoff|decisions|renderings|locations))?", path)
             if match:
                 plural, ident, action = match.groups()
                 kind = {"reports": "report", "tasks": "task", "proposals": "proposal", "completion-imports": "completion-import"}[plural]
@@ -1262,11 +1287,11 @@ class Handler(BaseHTTPRequestHandler):
                         data, mime = store.blob(record["packageSha256"])
                         return self.send(200, data, mime, {"Content-Disposition": f'attachment; filename="opus-{kind}-{ident}.zip"'})
                     return self.send(200, record)
-                if self.command == "POST" and kind == "proposal" and action in ("decisions", "renderings"):
+                if self.command == "POST" and kind == "proposal" and action in ("decisions", "renderings", "locations"):
                     user = self.app.user(self.headers, True)
                     body = self.read_body()
                     require(isinstance(body, dict), "Invalid proposal submission.")
-                    return self.send(200, store.decide(ident, body, user) if action == "decisions" else store.attach_rendering(ident, body, user))
+                    return self.send(200, store.decide(ident, body, user) if action == "decisions" else store.locate_correction(ident, body, user) if action == "locations" else store.attach_rendering(ident, body, user))
             raise Problem("Shared endpoint not found.", 404)
         except Problem as error:
             # Drain a small rejected JSON body before close so Windows sockets

@@ -303,6 +303,35 @@ class SharedServiceTests(unittest.TestCase):
         self.assertEqual(self.request("POST", url, changed, "david")[0], 200)
         self.assertEqual(self.request("GET", f"/api/proposals/{first['id']}")[1]["findings"][0]["decisionVersion"], 2)
 
+    def test_correction_locations_are_revision_bound_durable_and_not_decisions(self):
+        report = self.report(count=2)
+        task = self.task()
+        first = self.proposal(task, changed=True)
+        second = self.proposal(task, changed=True, variant="locations-two")
+        ident = report["findings"][0]["id"]
+        url = f"/api/proposals/{first['id']}/locations"
+        body = {"requestId": str(uuid.uuid4()), "findingId": ident, "position": {"page": 1, "point": [83.25, 140], "zoom": 2}, "expectedVersion": 0, "candidate": {k: first["candidate"][k] for k in ("snapshotId", "codeSha256", "renderSha256")}}
+        self.assertEqual(self.request("POST", url, body)[0], 401)
+        status, location = self.request("POST", url, body, "carol")
+        self.assertEqual(status, 200, location)
+        self.assertEqual(self.request("POST", url, body, "carol")[1]["id"], location["id"])
+        stale = {**body, "requestId": str(uuid.uuid4())}
+        self.assertEqual(self.request("POST", url, stale, "david")[0], 409)
+        fresh = self.request("GET", f"/api/proposals/{first['id']}")[1]
+        self.assertEqual(fresh["findings"][0]["location"]["position"], body["position"])
+        self.assertEqual(fresh["findings"][0]["locationVersion"], 1)
+        self.assertTrue(all(not f["decision"] for f in fresh["findings"]))
+        self.assertFalse(fresh["applied"])
+        other = self.request("GET", f"/api/proposals/{second['id']}")[1]
+        self.assertTrue(all(f["location"] is None for f in other["findings"]))
+        self.assertEqual(self.request("POST", f"/api/proposals/{second['id']}/locations", stale, "carol")[0], 409)
+        reopened = Store(self.root / "private-data", self.repo, self.site)
+        self.assertEqual(reopened.get_record("proposal", first["id"])["findings"][0]["location"]["id"], location["id"])
+        invalid = {**body, "requestId": str(uuid.uuid4()), "expectedVersion": 1, "position": {"page": 0, "point": [0, 0], "zoom": 1}}
+        self.assertEqual(self.request("POST", url, invalid, "carol")[0], 400)
+        pending = self.proposal(task, changed=True, pending=True)
+        self.assertEqual(self.request("POST", f"/api/proposals/{pending['id']}/locations", stale, "carol")[0], 409)
+
     def test_response_import_deduplication_and_stale_retention(self):
         self.report()
         task = self.task()

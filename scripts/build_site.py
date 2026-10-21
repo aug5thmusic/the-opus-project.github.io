@@ -26,7 +26,7 @@ PUBLIC_FILES = (
 CONTRIBUTOR_FILES = ("index.html", "style.css", "app.js", "work-links.mjs")
 SCORE_FILES = (
     "index.html", "style.css", "app.js", "model.js", "storage.js", "export.js",
-    "workflow.js", "handoff-store.js", "handoff-ui.js", "returned.js",
+    "workflow.js", "handoff-store.js", "handoff-ui.js", "returned.js", "comparison-model.js", "comparison-ui.js",
     "returned-ui.js", "completion-model.js", "completion.js", "completion-ui.js",
     "HANDOFF_FORMATS.md", "github-handoff.js", "shared-client.js", "shared-ui.js",
     "shared-packages.js", "shared-config.json", "SECURITY.md",

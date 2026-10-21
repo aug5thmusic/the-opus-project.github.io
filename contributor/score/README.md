@@ -16,6 +16,32 @@ Choose **Project contributions** for three ways to help:
 - **Check AI corrections**: compare the AI’s changes with the original and
   record a decision for each finding you checked.
 
+Checking corrections opens **Before · task baseline** beside **After · returned
+rendering**. The persistent finding toolbar carries the original comment, AI
+explanation, review explanation and progress. **Looks correct & next** advances
+only after storage acknowledges the decision; failed or uncertain saves keep the
+finding and draft selected. **Skip** makes no decision. This counts selected
+corrections, never full-score verification, application or publication.
+
+The left selector offers **Printed source** and restores the previous Before
+position when switched back. Only marks belonging to the displayed PDF appear;
+the selected historical finding has an outline, and other marks are optional.
+An older report opens its original PDF with a **Reported on an earlier version**
+label. Legacy packages with only crops show those crops explicitly. New local
+follow-ups retain original PDFs and annotations as well as their crops.
+
+After starts at an explicitly approximate page unless a corresponding location
+was saved. Navigate and zoom independently, then choose **Locate corrected
+passage**. This saves a PDF viewing position, without drawing or creating a
+finding, and does not approve anything. Locations bind the finding to the exact
+candidate code, PDF and snapshot. Shared locations use authenticated service
+storage and version checks; local locations travel in returned-review backups.
+**Save comparison package** also carries shared locations into a fresh local
+workspace, without importing service approval authority. Older packages without
+locations continue to work. AI location claims are not confirmed bookmarks.
+The existing new-finding tools remain attached to After, and comment drafts stay
+open while navigating findings or switching the left display.
+
 If the AI response has no PDF, open it and choose **Add PDF**. Select the PDF
 made from its LilyPond and enter who or what rendered it. **Replace PDF** saves
 another version. Each version has its own receipt and starts a new review.
@@ -108,8 +134,7 @@ The **?** button documents shortcuts: **N** prepares a finding, **D** draws,
 **V** selects Navigate, and **Ctrl+Enter** in the comment invokes Done & next.
 These hints are visible on the controls. Letter
 shortcuts ignore text fields, selects, contenteditable, composition and modifiers.
-Text fields keep native undo. Review mutations are blocked during busy operations,
-dialogs and previous-render comparison. Escape precedence is: native dialog
+Text fields keep native undo. Review mutations are blocked during busy operations and dialogs. Escape precedence is: native dialog
 behavior; composition/busy protection; cancel an unfinished gesture; otherwise
 leave drawing, editing and isolation. Saved marks, comments and decisions remain.
 
@@ -134,6 +159,12 @@ music, score recognition, downloaded scores or committed PDF/ZIP fixtures.
   creates its completed-review package from synthetic inputs at runtime. Open
   the historical test tab first; do not delete a database to make a used origin
   look fresh.
+
+`node scripts/browser-tests.mjs --suites=comparison` runs self-contained real
+browser comparison regressions with synthetic geometry and fresh storage. It
+does not depend on the workflow suite. The shared revision suite additionally
+checks cross-browser location persistence, portable comparison packages, lost
+acknowledgments and concurrent reviewers against the HTTP/SQLite service.
 
 QA source pages are development-only and should be excluded from the deployable
 site. Generated downloads and test browser storage are disposable test evidence,

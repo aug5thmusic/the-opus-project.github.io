@@ -72,6 +72,10 @@ try{
     await races.waitForFunction(()=>/ALL .*PASSED|\bFAIL\b/.test(document.querySelector('#results').textContent),null,{timeout:180000});
     await record(races,'races');}
     await context.close();
+    if(included('comparison')){
+      const {runComparison}=await import('./comparison-browser-tests.mjs');
+      results.push(await runComparison({browser,serve,evidence,root}));
+    }
     if(included('upgrade')){
     const fresh=await serve(root);services.push(fresh);
     const upgraded=await browser.newContext({viewport:{width:1440,height:1000}});

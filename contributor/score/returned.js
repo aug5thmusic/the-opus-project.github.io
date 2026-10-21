@@ -1,6 +1,7 @@
 // Returned-review metadata is separate from the content-hashed annotation model.
 import {clone,identify,newReview,sha256,STATES} from './model.js';
 import {retained} from './handoff-store.js';
+import {validateLocations} from './comparison-model.js';
 import {makeRecovery,zipFiles,observationText} from './export.js';
 import {makeTask,finalizeTask,localTaskDelivery,taskFindings,contextPaths,seal,json,plain,readPackage,readResponse,strictJSON,LIMITS} from './workflow.js';
 export const resultState={changed:'corrected_pending_review',unchanged_with_reason:'open',needs_clarification:'needs_source_clarification'};
@@ -54,6 +55,18 @@ export async function followupTask(scene,context,progress,packageMaker,{lookup=r
   const task=await makeTask(current,files,doc,context,progress,packageMaker);task.task.version=2;task.task.findings=requests;task.task.parent={workspaceId:round.id,responseId:round.responseId,taskId:round.taskId,contentSnapshotId:round.contentSnapshotId};
   for(const request of requests){const original=round.reported.find(f=>f.id===request.id),paths=original?original.context:['marked','clean'].map(type=>`findings/${String(request.number).padStart(3,'0')}-${request.id}-${type}.png`);
     for(let i=0;i<2;i++){const path=`historical/${request.id}-${i?'clean':'marked'}.png`,blob=(original?issued.payloads:task.payloads).get(paths[i]);if(blob){task.payloads.set(path,blob);request.historicalContext[i?'clean':'marked']=path;}}
+    const prior=original?taskFindings(issued).find(f=>f.id===request.id):null;
+    const history=prior?.historicalContext;
+    const sourceFiles=original?issued.files:files,sourceReview=original?issued.review:review;
+    if(request.historicalContext.renderSha256===sourceReview.files.rendered.sha256){
+      request.historicalContext.originalFiles={};
+      for(const role of ['source','rendered','ly']){const info=sourceReview.files[role],path=`historical/assets/${info.sha256}.${role==='ly'?'ly':'pdf'}`;task.payloads.set(path,sourceFiles[role].blob);request.historicalContext.originalFiles[role]={...info,path};}
+      const path=`historical/annotations/${sourceReview.snapshotId}.json`;task.payloads.set(path,json(sourceReview));request.historicalContext.annotations=path;
+    }else if(history?.originalFiles){
+      request.historicalContext.originalFiles=clone(history.originalFiles);
+      for(const info of Object.values(history.originalFiles)){const blob=issued.payloads.get(info.path);if(blob)task.payloads.set(info.path,blob);}
+      if(history.annotations){task.payloads.set(history.annotations,issued.payloads.get(history.annotations));request.historicalContext.annotations=history.annotations;}
+    }
   }
   task.payloads.set('historical/previous-rendering.pdf',issued.files.rendered.blob);task.payloads.set('historical/prior-response.json',json(entry.response));
   await finalizeTask(task);return task;
@@ -106,5 +119,8 @@ export async function restoreReturnedBackup(parsed,inspectPdf){
     const finding=task.findings.find(item=>item.id===f.id),agent=entry.response.results.find(item=>item.id===f.id);
     if(!ids.delete(f.id)||f.number!==finding.number||typeof f.comment!=='string'||f.comment.length>4000||!STATES.includes(f.state)||typeof f.explanation!=='string'||f.explanation.length>4000||JSON.stringify(f.agent)!==JSON.stringify(agent)||!Array.isArray(f.context)||f.context.length!==2||f.context.some(path=>typeof path!=='string'||!taskMap.has(path))||!f.origin||f.state==='resolved'&&!f.decision||f.decision&&(f.decision.state!==f.state||f.decision.reviewed.snapshotId!==round.contentSnapshotId||f.decision.reviewed.codeSha256!==round.codeSha256||f.decision.reviewed.renderSha256!==round.renderSha256))throw new Error('Returned-review decision or finding mismatch.');
   }
+  // Do not add an empty field to old completed evidence: its state hash covers
+  // the exact historical sidecar, including the absence of optional properties.
+  if(round.locations!==undefined)round.locations=validateLocations(round.locations,round,parsed.review);
   return {issued,entry,seed:{files:parsed.files,review:parsed.review,completionBundle:parsed.completionBundle,returned:{...round,id:'returned:recovery:'+crypto.randomUUID(),recoveredFrom:round.id}}};
 }

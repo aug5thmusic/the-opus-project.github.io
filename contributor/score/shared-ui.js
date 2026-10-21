@@ -3,6 +3,8 @@ import {loadSharedWork, prepareSharedReport, makeSharedTask, loadSharedTask, rea
 import {clone, sha256} from './model.js';
 import {canonical, SCOPES} from './completion-model.js';
 import {contextPaths, taskFindings} from './workflow.js';
+import {makeReturnedBackup} from './returned.js';
+import {savedLocation} from './comparison-model.js';
 
 const $ = id => document.getElementById(id);
 const idPart = value => encodeURIComponent(value);
@@ -117,6 +119,7 @@ export function installShared(api) {
   let taskAttempt = null, taskLinks = [], proposalImages = [], handoffLinks = [], loadedSnapshot = null, proposalRender = 0;
   let reportDraftName = null, reportLegacyDraftName = null, reportFormGeneration = 0, reportFormEdits = 0;
   let completionImport = null;
+  const decisionDrafts = new Map();
   const readSelectedWork = createCurrentWorkReader(slug => client.request(`/api/works/${idPart(slug)}`), () => selected);
   const status = (text, error = false) => { $('sharedStatus').textContent = text; $('sharedStatus').dataset.error = String(error); api.message(text, error); };
   const show = () => { $('workspaceDialog').close(); if (!$('sharedDialog').open) $('sharedDialog').showModal(); };
@@ -128,7 +131,7 @@ export function installShared(api) {
     try { return await fn(); } finally { busy = false; controls(); }
   };
   function controls() {
-    $('sharedProject').disabled = api.status().busy;
+    $('sharedProject').disabled = busy || api.status().busy;
     $('sharedSubmit').hidden = !client || !selected;
     document.body.classList.toggle('shared-work-selected', Boolean(client && selected));
     $('sharedSubmit').disabled = busy || api.status().busy || !api.capture().review;
@@ -137,7 +140,7 @@ export function installShared(api) {
     $('sharedSignOut').hidden = !client?.user;
     $('sharedDevForm').hidden = !client?.devAuth;
     if (proposal) for (const button of $('sharedProposalPanel').querySelectorAll('button,input,select,textarea')) button.disabled = busy || api.status().busy || button.dataset.sharedUnavailable === 'true';
-    const correct = $('sharedLooksCorrect'); if (correct) correct.disabled = busy || api.status().busy || !proposal?.seed;
+    api.corrections.refresh();
     const canonicalPdf = $('sharedUseProjectPdf'); if (canonicalPdf) canonicalPdf.hidden = !client?.user?.roles?.includes('maintainer');
     $('sharedSendCompletion').disabled = busy || api.status().busy || !completionImport || !selected || !detail?.current;
   }
@@ -193,7 +196,10 @@ export function installShared(api) {
         const result = await client.write(item.path, item.body); const kind = submissionKind(item.path);
         if (result.workId && result.workId !== selected) { selected = result.workId; $('sharedWork').value = selected; await refreshWork(); }
         if (kind === 'completion-import') { await completionReceipt(result); $('sharedCompletionImport').hidden = true; completionImport = null; }
-        else if (kind) receipt(kind, result); else status('Review decision acknowledged by the project.');
+        else if (kind) receipt(kind, result); else {
+          if(proposal?.proposal.id===result.proposalId){proposal.proposal=await client.request(`/api/proposals/${idPart(result.proposalId)}`);await renderProposal();}
+          status(item.path.endsWith('/locations')?'Location acknowledged by the project.':'Review decision acknowledged by the project.');
+        }
         await refreshPending(); if (selected) await refreshWork();
       })))); $('sharedPending').append(row);
     }
@@ -236,6 +242,7 @@ export function installShared(api) {
       try { imported = await loadSharedWork(client, detail, api.inspectPdf); }
       catch (error) { if (error.details?.needsSourceUpload) showSourceFallback(); throw error; }
       await api.openFiles(imported.files);
+      await api.leaveComparison();
       loadedSnapshot = imported.review.snapshotId; proposal = null; $('sharedProposalPanel').hidden = true; $('renderedLabel').textContent = 'Rendered score';
       return imported;
     });
@@ -459,7 +466,7 @@ export function installShared(api) {
       selected = item.proposal.workId ?? item.issued.task.shared.workId; $('sharedWork').value = selected;
       loadedSnapshot = api.capture().review.snapshotId;
       await refreshWork();
-      await renderProposal(); api.showFindings(); return item;
+      await renderProposal(); if (!item.seed) api.showFindings(); return item;
     });
     if (loaded) { close(); history.replaceState(null, '', receiptURL('proposal', id)); status('Compare the AI’s changes with the original score.'); }
   }
@@ -503,10 +510,10 @@ export function installShared(api) {
   }
   async function renderProposal() {
     const rendering = ++proposalRender;
-    const root = $('sharedProposalPanel'); root.replaceChildren(); revoke(proposalImages); if (!proposal) { root.hidden = true; return; } root.hidden = false;
+    const root = $('sharedProposalPanel'); root.replaceChildren(); revoke(proposalImages); if (!proposal) { root.hidden = true; return; } root.hidden = false; root.setAttribute('aria-busy','true');
     const findings = taskFindings(proposal.issued); proposalPosition = Math.max(0, Math.min(proposalPosition, findings.length - 1));
     const finding = findings[proposalPosition], result = proposal.entry.response.results.find(item => item.id === finding.id), sharedFinding = proposal.proposal.findings?.find(item => item.id === finding.id);
-    $('renderedLabel').textContent = proposal.seed ? proposalApplications(proposal.proposal).complete ? 'Applied rendering' : 'Proposed rendering' : 'Previous rendering · proposed PDF pending';
+    $('renderedLabel').textContent = proposal.seed ? 'After · returned rendering' : 'After unavailable · previous rendering shown';
     root.dataset.proposalId = proposal.proposal.id;
     root.append(node('h3', 'Check AI corrections'), node('p', applicationLabel(proposal.proposal), 'shared-proposal-state'));
     if (proposal.proposal.stale && proposal.proposal.candidate?.snapshotId !== proposal.proposal.current?.snapshotId) root.append(node('p', 'The project score has changed since this task.', 'shared-warning'));
@@ -521,15 +528,7 @@ export function installShared(api) {
       }
       root.append(versions);
     }
-    root.append(node('p', `Finding ${proposalPosition + 1} of ${findings.length}`));
-    const navigation = node('div', null, 'shared-inline-actions');
-    for (const [label, step] of [['Previous', -1], ['Next', 1]]) { const button = action(label, guard(async () => { proposalPosition += step; await renderProposal(); })); button.dataset.sharedUnavailable = String(proposalPosition + step < 0 || proposalPosition + step >= findings.length); navigation.append(button); }
-    const findingPicker = document.createElement('select'); findingPicker.id = 'sharedProposalFinding'; findingPicker.setAttribute('aria-label', 'Choose a reported finding');
-    findings.forEach((item, index) => findingPicker.add(new Option(`#${item.number} · ${proposalFindingState(proposal.proposal, item.id)}`, String(index)))); findingPicker.value = String(proposalPosition);
-    findingPicker.onchange = guard(async () => { proposalPosition = Number(findingPicker.value); await renderProposal(); }); navigation.append(findingPicker); root.append(navigation);
-    const findingStatus = node('p', proposalFindingState(proposal.proposal, finding.id), 'shared-finding-state'); findingStatus.id = 'sharedFindingStatus'; root.append(findingStatus);
-    root.append(node('strong', 'Original report'), node('p', finding.comment), node('small', `${actorName(finding)} · page ${finding.origin?.page ?? finding.page ?? 'unspecified'}`), node('strong', 'AI response'), node('p', result.explanation));
-    if (result.codeLocation) root.append(node('p', `Proposed code location: ${result.codeLocation}`));
+    root.append(node('small', `${actorName(finding)} · original page ${finding.origin?.page ?? finding.page ?? 'unspecified'}`));
     const details = node('details'), summary = node('summary', 'Original highlights'); details.append(summary);
     for (const [index, path] of contextPaths(proposal.issued, finding).entries()) {
       const blob = proposal.issued.payloads.get(path); if (!blob) continue; const url = URL.createObjectURL(blob); proposalImages.push(url);
@@ -559,31 +558,54 @@ export function installShared(api) {
       if (proposal.issued.files.ly.blob.size > limit || proposedCode.size > limit) files.append(node('p', 'Preview limited to the first 100 KiB of each file. The complete files are available from the download links above.'));
       files.append(columns);
     }
-    const explanationLabel = node('label', 'Your explanation'), explanation = document.createElement('textarea'); explanation.id = 'sharedDecisionExplanation'; explanation.maxLength = 4000; explanation.rows = 3; explanationLabel.append(explanation); root.append(explanationLabel);
-    const draftName = `decision:${proposal.proposal.id}:${finding.id}`;
-    explanation.oninput = () => client.saveDraft(draftName, {explanation: explanation.value}).catch(error => status(`Decision explanation could not be saved locally: ${error.message}. Keep this page open.`, true));
-    const savedDraft = await client.draft(draftName); if (rendering !== proposalRender) return; if (savedDraft) explanation.value = savedDraft.explanation ?? '';
-    const buttons = node('div', null, 'shared-decision-buttons');
-    for (const [id, label, state] of [['sharedLooksCorrect', 'Looks correct', 'looks_correct'], ['sharedStillCorrection', 'Still needs correction', 'needs_correction'], ['sharedNeedsClarification', 'Needs clarification', 'needs_clarification']]) { const button = action(label, guard(() => decision(finding.id, state, explanation.value))); button.id = id; buttons.append(button); }
-    root.append(buttons);
     const decisionHistory = node('details'); decisionHistory.append(node('summary', 'Shared decision history'));
     for (const entry of sharedFinding?.decisions ?? []) decisionHistory.append(node('p', `${entry.state.replaceAll('_', ' ')} · ${actorName(entry)} · ${entry.createdAt ?? entry.at} · ${entry.explanation ?? ''}`));
     if (!sharedFinding?.decisions?.length) decisionHistory.append(node('p', 'No shared decisions for this finding yet.'));
     root.append(decisionHistory, action('Project page and maintainer handoff', guard(async () => { show(); await refreshWork(); receipt('proposal', proposal.proposal); })));
-    controls();
+    const target=proposal, key=`shared:${target.proposal.id}`;
+    await api.corrections.open({key,shared:true,candidate:Boolean(target.seed),issued:target.issued,
+      ids:{previous:'previousCorrection',next:'nextCorrection',picker:'sharedProposalFinding',explanation:'sharedDecisionExplanation',approve:'sharedLooksCorrect',reject:'sharedStillCorrection',clarify:'sharedNeedsClarification',state:'sharedFindingStatus'},
+      matches:s=>s.review?.snapshotId===loadedSnapshot&&!s.returned,
+      findings:()=>taskFindings(target.issued),result:id=>target.entry.response.results.find(f=>f.id===id),
+      explanation:async id=>{const name=`decision:${target.proposal.id}:${id}`;return decisionDrafts.get(name)??(await client.draft(name))?.explanation??'';},
+      saveExplanation:(id,value)=>{const name=`decision:${target.proposal.id}:${id}`;decisionDrafts.set(name,value);return client.saveDraft(name,{explanation:value});},
+      decision:id=>target.proposal.findings?.find(f=>f.id===id)?.decision,
+      state:id=>proposalFindingState(target.proposal,id),canApprove:()=>Boolean(target.seed),
+      location:id=>target.proposal.findings?.find(f=>f.id===id)?.location,
+      exportPackage:()=>api.lock(async()=>{
+        await api.flush();const scene=api.capture(),round=clone(target.seed.returned);
+        round.locations=Object.fromEntries((target.proposal.findings??[]).filter(f=>savedLocation(f.location,f.id,scene.review)).map(f=>[f.id,f.location]));
+        round.sharedProposalUrl=receiptURL('proposal',target.proposal.id).href;
+        const payloads=await makeReturnedBackup(scene.review,scene.files,round,null,{lookup:async id=>id===target.issued.id?target.issued:id===target.entry.id?target.entry:null});
+        api.download(await api.zip(payloads),'score-desk-comparison.zip');
+      }),
+      saveDecision:decision,
+      saveLocation:async(findingId,location)=>{
+        requireUser();
+        const expectedVersion=target.proposal.findings.find(f=>f.id===findingId).locationVersion??0;
+        const body={findingId,position:location.position,expectedVersion,candidate:location.candidate};
+        body.requestId=await contentKey({kind:'correction-location',proposalId:target.proposal.id,actor:client.user.id,...body});
+        try{await api.lock(()=>client.write(`/api/proposals/${idPart(target.proposal.id)}/locations`,body));}
+        catch(error){if(error.status===409){target.proposal=await client.request(`/api/proposals/${idPart(target.proposal.id)}`);throw new Error('This location changed in another browser. Your view is kept; review the saved location before trying again.');}throw error;}
+        target.proposal=await client.request(`/api/proposals/${idPart(target.proposal.id)}`);return true;
+      },
+      onSelect:async next=>{if(proposalPosition!==next){proposalPosition=next;await renderProposal();}}
+    });
+    root.removeAttribute('aria-busy');controls();
   }
   async function decision(findingId, state, explanation) {
     requireUser(); if (!proposal) return;
     if (!proposal.seed && state === 'looks_correct') throw new Error('A current proposed rendering is required before visual approval.');
     if (state !== 'looks_correct' && !explanation.trim()) throw new Error('Explain what still needs correction or clarification.');
-    await run(async () => {
+    return await run(async () => {
       const target = proposal.proposal.findings?.find(item => item.id === findingId), expectedVersion = target?.decisionVersion ?? 0;
       const body = {findingId, state, explanation: explanation.trim(), expectedVersion}; body.requestId = await contentKey({kind: 'decision', proposalId: proposal.proposal.id, actor: client.user.id, ...body});
       try { await api.lock(() => client.write(`/api/proposals/${idPart(proposal.proposal.id)}/decisions`, body)); }
       catch (error) { if (error.status === 409) { proposal.proposal = await client.request(`/api/proposals/${idPart(proposal.proposal.id)}`); await renderProposal(); throw new Error('Another reviewer recorded a decision first. Their history is now shown. Check it before submitting your decision again.'); } throw error; }
-      await client.clearDraft(`decision:${proposal.proposal.id}:${findingId}`);
       proposal.proposal = await client.request(`/api/proposals/${idPart(proposal.proposal.id)}`); await renderProposal(); await refreshPending();
-      status('Decision submitted.');
+      await client.clearDraft(`decision:${proposal.proposal.id}:${findingId}`);
+      decisionDrafts.delete(`decision:${proposal.proposal.id}:${findingId}`);
+      status('Decision submitted.');return true;
     });
   }
   async function handoff(kind, id) {

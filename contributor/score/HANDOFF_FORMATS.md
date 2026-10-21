@@ -492,3 +492,24 @@ verification. Older readers can access ordinary inputs/annotations but require
 this extension to retain completion declarations.
 
 Completed-review packages include manifest-hashed `SUBMIT_TO_GITHUB.txt` as an ordinary declared payload. It identifies the exact completion/candidate and available task-baseline chain, with unknown repository paths/commits explicit. The browser only prepares local files. The receiving Git-capable agent resolves and validates the target before opening a correction PR at https://github.com/the-opus-project/the-opus-project.github.io. Old packages need no new extension. Historical completion records, region fields and totals retain their existing semantics; text-only annotations have page context without marked geometry.
+
+## Correction viewing locations (optional, backward compatible)
+
+The version-1 returned-workspace sidecar may contain `locations`, keyed by
+reported finding ID. Each entry has `version: 1`, `findingId`, `candidate`
+(`snapshotId`, `codeSha256`, `renderSha256`) and `position` (`page`, native
+unrotated PDF user-space `point`, and `zoom`, either `fit` or a supported scale).
+Import checks all three candidate hashes, finding membership, page range,
+crop-box bounds and zoom. Missing locations mean unlocated, never matched.
+Locations are separate from annotations, associations with new findings and
+review decisions. Neither AI response fields nor a changed-render revision
+automatically supplies them.
+
+Shared proposals expose `location` and `locationVersion` on each finding.
+Authenticated `POST /api/proposals/:id/locations` accepts the exact candidate,
+finding, position, expected location version and idempotent request ID. The
+service assigns authorship and records an independent event. The browser checks
+actual PDF geometry before displaying a stored location. Service receipts retain
+shared decisions; a portable comparison package carries locations and current
+annotations but does not import shared approval authority into local review.
+Original response/task packages remain immutable.
