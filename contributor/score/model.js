@@ -32,17 +32,37 @@ export function bounds(strokes) {
   for(const s of strokes) for(const [x,y] of s.points){x0=Math.min(x0,x-s.width/2);y0=Math.min(y0,y-s.width/2);x1=Math.max(x1,x+s.width/2);y1=Math.max(y1,y+s.width/2);}
   return x0===Infinity?null:[x0,y0,x1,y1];
 }
+// Screen paint and hit testing share marker geometry, including rotation/crops.
+export function markerPosition(viewport,finding) {
+  if(!finding.strokes.length)return null;
+  let x=Infinity,y=Infinity;
+  for(const s of finding.strokes)for(const p of s.points){const [px,py]=viewport.convertToViewportPoint(...p);x=Math.min(x,px);y=Math.min(y,py);}
+  const radius=11*viewport.scale*viewport.userUnit;
+  return {x:Math.max(radius+2,Math.min(viewport.width-radius-2,x)),y:Math.max(radius+2,Math.min(viewport.height-radius-2,y-radius-3)),radius};
+}
+export function hitFinding(viewport,findings,pageNumber,x,y) {
+  // Last painted wins when marks overlap. All distances are in CSS pixels.
+  for(const f of findings.filter(f=>f.page===pageNumber).slice().reverse()){
+    const marker=markerPosition(viewport,f);
+    if(marker&&Math.hypot(x-marker.x,y-marker.y)<=marker.radius+3)return f;
+    for(const s of f.strokes){
+      const points=s.points.map(p=>viewport.convertToViewportPoint(...p)),radius=s.width*viewport.scale*viewport.userUnit/2+3;
+      for(let i=0;i<points.length;i++){
+        const a=points[Math.max(0,i-1)],b=points[i],dx=b[0]-a[0],dy=b[1]-a[1],length=dx*dx+dy*dy;
+        const t=length?Math.max(0,Math.min(1,((x-a[0])*dx+(y-a[1])*dy)/length)):0;
+        if(Math.hypot(x-a[0]-t*dx,y-a[1]-t*dy)<=radius)return f;
+      }
+    }
+  }
+  return null;
+}
 // Shared by screen, crops, and the flattened PDF. Each stroke is composited once.
 export function paint(ctx, viewport, findings, pageNumber, draft=null) {
   for (const f of findings.filter(f=>f.page===pageNumber)) {
     for (const s of f.strokes) drawStroke(ctx,viewport,s);
     const box=bounds(f.strokes);
     if(!box) continue;
-    let x=Infinity,y=Infinity;
-    for(const s of f.strokes)for(const p of s.points){const [px,py]=viewport.convertToViewportPoint(...p);x=Math.min(x,px);y=Math.min(y,py);}
-    const radius=11*viewport.scale*viewport.userUnit;
-    x=Math.max(radius+2,Math.min(viewport.width-radius-2,x));
-    y=Math.max(radius+2,Math.min(viewport.height-radius-2,y-radius-3));
+    const {x,y,radius}=markerPosition(viewport,f);
     ctx.save();ctx.globalAlpha=1;ctx.fillStyle='#145b4b';ctx.beginPath();ctx.arc(x,y,radius,0,2*Math.PI);ctx.fill();ctx.fillStyle='#fff';ctx.textAlign='center';ctx.textBaseline='middle';ctx.font=`bold ${11*viewport.scale*viewport.userUnit}px sans-serif`;ctx.fillText(String(f.number),x,y);ctx.restore();
   }
   if(draft) drawStroke(ctx,viewport,draft);

@@ -1,6 +1,6 @@
 import {fixtureBlob} from './fixtures.js';
 import {getSaved} from '../storage.js';
-if(location.port==='8939'||location.hostname!=='127.0.0.1')throw new Error('Run QA on an isolated loopback port, never 8939.');
+if(['8939','8945'].includes(location.port)||location.hostname!=='127.0.0.1')throw new Error('Run QA on an isolated loopback port, never 8939 or 8945.');
 const params=new URLSearchParams(location.search),slot=params.get('slot'),channel=new BroadcastChannel(params.get('channel'));
 const frame=document.getElementById('app'),label=document.getElementById('status');
 frame.src='../index.html';
@@ -22,7 +22,7 @@ const actions={
     await choose('sourceFile',blobs[0],'race-source.pdf');await choose('renderedFile',blobs[1],'race-rendered.pdf');await choose('lyFile',blobs[2],'race.ly');
     $('load').click();await wait(()=>!api().sessionStatus().busy&&$('message').textContent.includes('ready')||!api().sessionStatus().busy&&$('message').textContent.includes('Reopened'),'snapshot load');await api().saveNow();return stats();
   },
-  async add({comment}){$('newFinding').click();edit(comment);await stroke();$('saveFinding').click();await api().saveNow();return stats();},
+  async add({comment}){$('newFinding').click();edit(comment);await stroke();$('saveFinding').click();await wait(()=>!$('comment').disabled,'finding completion');await api().saveNow();return stats();},
   async edit({comment}){await select();edit(comment);return stats();},
   async save(){await api().saveNow();return stats();},
   async openSaved({id}){$('saved').value=id;$('reopen').click();await wait(()=>!api().sessionStatus().busy&&api().sessionStatus().workspaceId===id,'returned workspace open');return stats();},

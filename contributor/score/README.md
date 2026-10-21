@@ -29,17 +29,55 @@ PDF.js, pdf-lib and JSZip are vendored with their licenses so the app does not
 fetch dependencies at runtime. Guidance snapshots are refreshed by the site
 build from the repository's current `AGENTS.md` and `HANDBOOK.md`.
 
+## Repeated proofreading
+
+The source and rendered scores are side by side by default, including in a
+724 × 420 panel. Each has independent page, zoom and scroll controls. On narrow
+screens, **Both**, **Source** and **Rendered** let you enlarge either score.
+The comment editor appears automatically in a compact dock below both scores
+after painting; additional strokes can still join the group without closing it.
+**Findings** opens a drawer for older comments and returned-review decisions.
+On desktop the editor and findings list stay beside both scores. **Workspace &
+files** holds file setup, saved reviews, packages, mark visibility
+and histories. **Cycle colors** stays beside the color picker in the review toolbar. **Open package** and **Finish and export** stay at the top.
+
+Choose **Draw** and paint to create a finding, or choose **New finding** first.
+Preparing alone saves nothing and consumes no number or color. Completed strokes
+and typing autosave; further strokes join the same finding. **Done** ends editing.
+**Done & next** saves the current group and prepares drawing another, without
+creating an empty finding. Neither action changes a review decision or coverage.
+A comment without a stroke is retained and must be marked before Done completes.
+A failed or conflicted save keeps editing open and offers the existing recovery
+ZIP. Undo reverses an automatic finding and its first stroke together.
+
+**Editing finding #N** identifies the stroke destination. **Only showing finding
+#N** is a separate visibility filter beside the rendered score. **Show all ×**
+clears that filter without changing the editor. In Pan mode, click a visible
+stroke or number to edit its comment; dragging pans without selecting. For
+overlapping marks the last painted finding wins; the findings list lets you
+select any underlying finding.
+
+The **?** button documents shortcuts: **N** prepares a finding, **D** draws,
+**V** pans, and **Ctrl+Enter** in the comment invokes Done & next. Letter
+shortcuts ignore text fields, selects, contenteditable, composition and modifiers.
+Text fields keep native undo. Review mutations are blocked during busy operations,
+dialogs and previous-render comparison. Escape precedence is: native dialog
+behavior; composition/busy protection; cancel an unfinished gesture; otherwise
+leave drawing, editing and isolation. Saved marks, comments and decisions remain.
+
 ## Regression checks
 
 Run `node contributor/score/qa/check-integration.cjs` for static integration and
 module syntax checks. This does not compile a score or require installation.
 
 Browser suites must run sequentially on a separate, disposable loopback origin,
-never the contributor's normal origin. Ports 8939 and non-loopback hosts are
+never the contributor's normal origin. Ports 8939, 8945 and non-loopback hosts are
 refused. The suites create synthetic PDF geometry in memory, with no actual
 music, score recognition, downloaded scores or committed PDF/ZIP fixtures.
 
 - `qa/index.html`: brush, color/focus, geometry, undo/redo, persistence and export.
+- `qa/desk.html`: repeated completion, paint-first creation/cancellation, undo,
+  selection and rotated geometry, keyboard safety, save faults and layout.
 - `qa/workflow.html`: package/task/response and returned revision review.
 - `qa/completion.html`: completion logging, explicit scope, persistence and export;
   run the workflow suite on the same test origin first.

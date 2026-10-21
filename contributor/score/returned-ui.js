@@ -25,7 +25,7 @@ export function installReturned(api,host){
     finally{working=false;controls();}
     if(host.getShown()?.id===target.id&&api.matches(captured.stamp))await open(target,attachment);else api.message('Rendering retained for the earlier selected revision. The current workspace was not changed.');
   });
-  function controls(){const s=api.capture(),disabled=api.status().busy||working||decisionBusy;for(const button of document.querySelectorAll('[data-round-action]'))button.disabled=disabled||!s.returned||s.comparison&&['looksCorrect','stillCorrection','needsClarification','locateRegion','showRegion','exportFollowup'].includes(button.id);$('roundVersion').disabled=disabled||!s.returned;}
+  function controls(){const s=api.capture(),disabled=api.status().busy||working||decisionBusy;for(const button of document.querySelectorAll('[data-round-action]'))button.disabled=disabled||!s.returned||s.comparison&&['looksCorrect','stillCorrection','needsClarification','locateRegion','showRegion','exportFollowup'].includes(button.id);$('roundVersion').disabled=disabled||!s.returned;$('roundExplanation').disabled=disabled||s.comparison;}
   async function render(){
     const scene=api.capture(),round=scene.returned;$('returnedPanel').hidden=!round;$('returnedBar').hidden=!round;document.body.classList.toggle('returned-review',Boolean(round));
     if(!round){for(const url of images)URL.revokeObjectURL(url);images=[];panelId=null;$('renderedLabel').textContent='Rendered score';return;}
@@ -45,7 +45,7 @@ export function installReturned(api,host){
     $('roundMetadata').textContent=JSON.stringify({workspaceId:round.id,contentSnapshotId:round.contentSnapshotId,responseId:round.responseId,taskId:round.taskId,parentRevisionId:round.parentRevisionId,codeSha256:round.codeSha256,renderSha256:round.renderSha256,provenance:round.provenance,decision:f.decision},null,2);controls();
   }
   $('previousFinding').onclick=guard(async()=>{if(api.status().busy)return;position--;await render();});$('nextFinding').onclick=guard(async()=>{if(api.status().busy)return;position++;await render();});
-  $('roundExplanation').oninput=()=>{const s=api.capture(),f=s.returned?.reported[position];if(!f||api.status().busy){if(f)$('roundExplanation').value=f.explanation;return;}api.updateReturned(r=>r.reported.find(item=>item.id===f.id).explanation=$('roundExplanation').value);};
+  $('roundExplanation').oninput=()=>{const s=api.capture(),f=s.returned?.reported[position];if(!f||api.status().busy||s.comparison){if(f)$('roundExplanation').value=f.explanation;return;}api.updateReturned(r=>r.reported.find(item=>item.id===f.id).explanation=$('roundExplanation').value);};
   async function decide(state){
     if(working||decisionBusy||api.status().busy||api.capture().comparison)return;const s=api.capture(),f=s.returned?.reported[position];if(!f)return;
     if(state!=='resolved'&&!f.explanation.trim())throw new Error('Add your explanation before requesting another correction or source clarification.');
