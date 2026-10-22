@@ -12,7 +12,7 @@ import {installShared} from './shared-ui.js';
 import {installComparison} from './comparison-ui.js';
 pdfjs.GlobalWorkerOptions.workerSrc='./vendor/pdf.worker.mjs';
 const $=id=>document.getElementById(id);
-let review=null, files=null, active=null, focused=null, mode='navigate', gesture=null, undo=[],redo=[], busy=false,revision=0,dirty=false;
+let review=null, files=null, active=null, mode='navigate', gesture=null, undo=[],redo=[], busy=false,revision=0,dirty=false;
 let persistedRevision=null,saveConflict=false,recoveryStamp=null,recoveryJob=null,exportJob=null;
 let returned=null,comparison=null;
 let leftDisplay=null;
@@ -79,7 +79,7 @@ function annotationState(){return {review:clone(review),active,prepared,pendingR
 function checkpoint(){undo.push(annotationState());if(undo.length>80)undo.shift();redo=[];}
 function changed(){revision++;revisionId=crypto.randomUUID();dirty=true;review.updatedAt=new Date().toISOString();invalidateExport();document.dispatchEvent(new Event('score-desk-change'));renderFindings();drawOverlay();scheduleSave();}
 function controls(){
-  for(const id of ['newFinding','navigate','draw','undo','redo','brush','hide','draft','export','highlightColor','autoColor','showAll','comment','findingState','saveFinding','doneNext','deleteFinding'])$(id).disabled=!canEdit();
+  for(const id of ['newFinding','navigate','draw','undo','redo','brush','hide','draft','export','highlightColor','autoColor','comment','findingState','saveFinding','doneNext','deleteFinding'])$(id).disabled=!canEdit();
   // Package/export controls inside the workspace dialog remain usable there.
   for(const id of ['draft','export'])$(id).disabled=!review||busy;
   for(const region of [document.querySelector('main'),document.querySelector('.toolbar'),$('filesPanel')])region.inert=busy;
@@ -87,11 +87,11 @@ function controls(){
   $('load').disabled=busy;$('reopen').disabled=busy;$('undo').disabled=!undo.length||!canEdit();$('redo').disabled=!redo.length||!canEdit();
   for(const el of document.querySelectorAll('[data-handoff-action]'))el.disabled=busy||(el.dataset.needsReview!==undefined&&!review);
   $('findingState').disabled=!current()||!canEdit();$('deleteFinding').disabled=!current()||!canEdit();
-  $('hide').disabled=!review||busy||Boolean(comparison);
+  $('hide').disabled=!review||busy;
   $('comparisonControl').hidden=!returned;
   $('editTitle').textContent=comparison?'Previous rendering · read only':current()?findingTitle(current()):'New finding · type or draw';
   noticeLayout();
-  for(const button of document.querySelectorAll('.finding-open,.focus-finding')){button.disabled=!canEdit();button.title=comparison?'Switch to the current rendering to select current marks.':'';}
+  for(const button of document.querySelectorAll('.finding-open')){button.disabled=!canEdit();button.title=comparison?'Switch to the current rendering to select current marks.':'';}
   document.dispatchEvent(new Event('score-desk-controls'));
 }
 function setMode(next){cancelGesture();mode=next;document.body.classList.toggle('drawing',mode==='draw');$('draw').setAttribute('aria-pressed',String(mode==='draw'));$('navigate').setAttribute('aria-pressed',String(mode==='navigate'));}
@@ -143,7 +143,7 @@ async function openSnapshot(nextFiles=null,targetId=null,imported=null,seed=null
     for(const v of Object.values(views)){v.serial++;v.task?.cancel();if(v.task)try{await v.task.promise;}catch{}await v.doc?.destroy();}
     invalidateExport();files=nextFiles;review=nextReview;returned=clone(nextReturned);revision++;dirty=restoredInstructions||(seed||bundle?false:Boolean(imported)||!stored);persistedRevision=stored?(stored.storageRevision??0):null;
     revisionId=stored?.returned&&!bundle?stored.revisionId??nextRevisionId:nextRevisionId;completions=mergeCompletions(stored?.completions,nextCompletions);
-    saveFailed=false;saveConflict=false;recoveryStamp=null;active=null;focused=null;prepared=false;pendingReportedId=null;undo=[];redo=[];
+    saveFailed=false;saveConflict=false;recoveryStamp=null;setMarksHidden(false);active=null;prepared=false;pendingReportedId=null;undo=[];redo=[];
     document.dispatchEvent(new Event('score-desk-change'));
     $('emergency').hidden=true;storageStatus(stored?'Saved locally':'Saving…');
     views.source.doc=docs[0];views.rendered.doc=docs[1];
@@ -212,7 +212,7 @@ async function showHistorical(asset,position,showOthers=false){
 }
 function drawHistorical(){
   const canvas=$('historicalOverlay'),v=views.source,asset=leftDisplay?.asset;
-  canvas.hidden=!asset;if(!asset||!v.viewport)return;
+  canvas.hidden=!asset||$('hide').checked;if(!asset||!v.viewport||$('hide').checked)return;
   canvas.width=$('sourceCanvas').width;canvas.height=$('sourceCanvas').height;canvas.style.width=$('sourceCanvas').style.width;canvas.style.height=$('sourceCanvas').style.height;
   const ctx=canvas.getContext('2d');ctx.setTransform(v.dpr,0,0,v.dpr,0,0);
   const selected=asset.marks.filter(f=>f.id===asset.selectedId);
@@ -221,7 +221,16 @@ function drawHistorical(){
   for(const f of selected)if(f.page===v.page&&f.bounds){const [x0,y0,x1,y1]=v.viewport.convertToViewportRectangle(f.bounds);ctx.strokeStyle='#123f39';ctx.lineWidth=2;ctx.setLineDash([5,3]);ctx.strokeRect(Math.min(x0,x1)-5,Math.min(y0,y1)-5,Math.abs(x1-x0)+10,Math.abs(y1-y0)+10);}
   canvas.dataset.findingIds=(leftDisplay.showOthers?asset.marks:selected).filter(f=>f.page===v.page).map(f=>f.id).join(',');
 }
-function drawOverlay(){const v=views.rendered,c=$('overlay'),ctx=c.getContext('2d');ctx.setTransform(1,0,0,1,0,0);ctx.clearRect(0,0,c.width,c.height);if(comparison||!review||!v.viewport||$('hide').checked)return;ctx.setTransform(v.dpr,0,0,v.dpr,0,0);paint(ctx,v.viewport,focused?review.findings.filter(f=>f.id===focused):review.findings,v.page,gesture?.stroke);}
+function drawOverlay(){const v=views.rendered,c=$('overlay'),ctx=c.getContext('2d');ctx.setTransform(1,0,0,1,0,0);ctx.clearRect(0,0,c.width,c.height);if(comparison||!review||!v.viewport||$('hide').checked)return;ctx.setTransform(v.dpr,0,0,v.dpr,0,0);paint(ctx,v.viewport,review.findings,v.page,gesture?.stroke);}
+// Visibility is temporary view state; it never changes saved findings or exports.
+function setMarksHidden(hidden){
+  cancelGesture();$('hide').checked=hidden;drawOverlay();drawHistorical();
+}
+function toggleMarks(){
+  if(!review||busy)return;
+  setMarksHidden(!$('hide').checked);
+  message($('hide').checked?'Finding marks hidden. Ctrl+H shows them again.':'Finding marks shown.');
+}
 function current(){return review?.findings.find(f=>f.id===active);}
 const findingTitle=f=>`Editing finding #${f.number} · ${f.strokes.length?'page':'text-only · page context'} ${f.page}`;
 function nextColor(){const p=review.preferences;return p.autoColor?PALETTE[p.colorCursor].color:p.color;}
@@ -236,7 +245,7 @@ function createFinding(){
   if(review.preferences.autoColor)review.preferences.colorCursor=(review.preferences.colorCursor+1)%PALETTE.length;
   const reported=returned?.reported.find(item=>item.id===pendingReportedId);
   if(reported){review.findings=review.findings.filter(mark=>mark.id!==reported.associationId);reported.associationId=f.id;}
-  review.findings.push(f);active=f.id;focused=null;prepared=false;pendingReportedId=null;return f;
+  review.findings.push(f);active=f.id;prepared=false;pendingReportedId=null;return f;
 }
 function setComments(open){
   document.body.classList.toggle('comments-open',open);$('toggleComments').setAttribute('aria-expanded',String(open));
@@ -249,8 +258,8 @@ function showScore(kind){
 function revealRendered(){if(document.body.dataset.score==='source')showScore('rendered');}
 function newFinding(reportedId=null){
   if(!canEdit())return;
-  findingCapacity();cancelGesture();active=null;focused=null;prepared=true;pendingReportedId=typeof reportedId==='string'?reportedId:null;
-  revealRendered();setComments(false);setMode('draw');$('hide').checked=false;renderFindings();drawOverlay();
+  findingCapacity();cancelGesture();active=null;prepared=true;pendingReportedId=typeof reportedId==='string'?reportedId:null;
+  revealRendered();setComments(false);setMode('draw');setMarksHidden(false);renderFindings();drawOverlay();
   (pendingReportedId?$('overlay'):$('comment')).focus({preventScroll:true});
   message('Type a note or mark a passage.');
 }
@@ -261,7 +270,7 @@ async function finishFinding(next=false){
   busy=true;cancelGesture();controls();
   try{
     if(!await saveNow()||saveFailed||saveConflict){if(!storageProblem)message('Finding is still being edited. Retry Done or download a recovery ZIP.',true);return;}
-    active=null;focused=null;prepared=next;pendingReportedId=null;setMode(next?'draw':'navigate');
+    active=null;prepared=next;pendingReportedId=null;setMode(next?'draw':'navigate');
     renderFindings();drawOverlay();setComments(false);
     message(`Finding #${f.number} saved locally.${next?' Add the next finding.':''}`);
   }finally{busy=false;controls();if(!active)(next&&!f.strokes.length?$('comment'):$('overlay')).focus({preventScroll:true});}
@@ -273,13 +282,9 @@ async function selectFinding(id){
   const pageChanged=views.rendered.page!==f.page;views.rendered.page=f.page;$('renderedPage').value=f.page;renderFindings();drawOverlay();
   if(pageChanged){$('renderedScroll').scrollTo(0,0);await renderPage(views.rendered);}
 }
-function clearFocus(){if(!canEdit())return;cancelGesture();focused=null;$('hide').checked=false;renderFindings();drawOverlay();}
 function renderFindings(){
   $('findingCount').textContent=review?.findings.length??0;const f=current();$('editor').hidden=!f&&!prepared;
   $('commentDock').hidden=$('editor').hidden;
-  if(focused&&!review?.findings.some(f=>f.id===focused))focused=null;
-  const focusFinding=review?.findings.find(f=>f.id===focused);
-  $('focusStatus').textContent=focusFinding?`Only showing finding #${focusFinding.number}`:'';$('showAll').hidden=!focused;$('focusBar').hidden=!focused;
   $('toggleComments').textContent='Findings';
   $('highlightColor').value=f?.color??(review?nextColor():PALETTE[0].color);
   $('colorSwatch').style.backgroundColor=$('highlightColor').value;
@@ -293,9 +298,7 @@ function renderFindings(){
     const item=document.createElement('div');item.className=`finding ${finding.id===active?'active':''}`;item.dataset.findingId=finding.id;item.style.borderLeftColor=finding.color;
     const open=document.createElement('button');open.className='finding-open';const title=document.createElement('b');title.textContent=`#${finding.number} · ${finding.strokes.length?'rendered page':'page context'} ${finding.page}`;const comment=document.createElement('span');comment.className='finding-comment';comment.textContent=finding.comment||'(Comment not entered)';const meta=document.createElement('small');meta.textContent=`${finding.state.replaceAll('_',' ')} · ${finding.strokes.length?finding.strokes.length+' stroke(s)':'text-only'}`;open.append(title,comment,meta);
     const choose=guard(()=>selectFinding(finding.id));open.onclick=e=>{e.stopPropagation();choose();};item.onclick=choose;
-    const focus=document.createElement('button');focus.className='focus-finding';focus.textContent=focused===finding.id?'Show all':'Only show';focus.setAttribute('aria-label',focused===finding.id?'Show all findings':`Only show finding ${finding.number}`);focus.setAttribute('aria-pressed',String(focused===finding.id));
-    focus.onclick=guard(async e=>{e.stopPropagation();if(!canEdit())return;cancelGesture();const exiting=focused===finding.id;focused=exiting?null:finding.id;$('hide').checked=false;revealRendered();const pageChanged=!exiting&&views.rendered.page!==finding.page;if(pageChanged){views.rendered.page=finding.page;$('renderedPage').value=finding.page;}renderFindings();drawOverlay();if(pageChanged)await renderPage(views.rendered);});
-    item.append(open,focus);list.append(item);
+    item.append(open);list.append(item);
   }
   controls();
 }
@@ -331,7 +334,7 @@ $('overlay').addEventListener('pointerup',guard(async e=>{
     if(focusComment&&canEdit()&&current()?.id===f.id)$('comment').focus({preventScroll:true});
   }else{
     if(!completed.dragged&&Math.hypot(e.clientX-completed.x,e.clientY-completed.y)<=5&&canEdit()&&!$('hide').checked){
-      const f=hitFinding(views.rendered.viewport,focused?review.findings.filter(f=>f.id===focused):review.findings,views.rendered.page,...viewportPoint(e));
+      const f=hitFinding(views.rendered.viewport,review.findings,views.rendered.page,...viewportPoint(e));
       if(f)await selectFinding(f.id);
     }
     drawOverlay();
@@ -341,9 +344,9 @@ $('overlay').addEventListener('pointercancel',e=>{if(gesture?.pointerId===e.poin
 $('overlay').addEventListener('lostpointercapture',e=>{if(gesture?.pointerId===e.pointerId&&!$('overlay').hasPointerCapture(e.pointerId))cancelGesture();});
 const commands={
   new:()=>newFinding(),draw:()=>{if(canEdit()){revealRendered();setMode('draw');}},navigate:()=>{if(canEdit())setMode('navigate');},
-  done:()=>finishFinding(),next:()=>finishFinding(true),undo:()=>history(undo,redo),redo:()=>history(redo,undo),showAll:clearFocus
+  done:()=>finishFinding(),next:()=>finishFinding(true),undo:()=>history(undo,redo),redo:()=>history(redo,undo)
 };
-for(const [id,name]of Object.entries({navigate:'navigate',draw:'draw',newFinding:'new',saveFinding:'done',doneNext:'next',undo:'undo',redo:'redo',showAll:'showAll'}))$(id).onclick=guard(commands[name]);
+for(const [id,name]of Object.entries({navigate:'navigate',draw:'draw',newFinding:'new',saveFinding:'done',doneNext:'next',undo:'undo',redo:'redo'}))$(id).onclick=guard(commands[name]);
 $('comment').addEventListener('input',guard(()=>{
   if(!canEdit()){$('comment').value=current()?.comment??'';return;}
   if(!current()&&!prepared)return;const value=$('comment').value;if(!current()&&!value.trim())return;
@@ -352,7 +355,7 @@ $('comment').addEventListener('input',guard(()=>{
 $('findingState').onchange=()=>{if(!current())return;if(!canEdit()){$('findingState').value=current().state;return;}checkpoint();current().state=$('findingState').value;changed();};
 $('deleteFinding').onclick=()=>{if(!canEdit()||!current())return;cancelGesture();checkpoint();review.findings=review.findings.filter(f=>f.id!==active);active=null;prepared=false;changed();};
 function history(from,to){if(!from.length||!canEdit())return;cancelGesture();to.push(annotationState());const prior=from.pop();review=prior.review;active=prior.active;prepared=prior.prepared;pendingReportedId=prior.pendingReportedId;if(returned&&prior.workspaceId===returned.id){const links=new Map(prior.associations);for(const f of returned.reported)f.associationId=links.get(f.id)??null;}if(!current())active=null;changed();}
-$('hide').onchange=()=>{if(!review||busy||comparison)return;cancelGesture();drawOverlay();};$('brush').oninput=()=>$('brushValue').textContent=`${$('brush').value} pt`;
+$('hide').onchange=()=>{if(!review||busy)return;setMarksHidden($('hide').checked);};$('brush').oninput=()=>$('brushValue').textContent=`${$('brush').value} pt`;
 $('highlightColor').onchange=()=>{if(!canEdit())return;cancelGesture();checkpoint();const color=$('highlightColor').value;review.preferences.color=color;if(review.preferences.autoColor)review.preferences.colorCursor=(PALETTE.findIndex(p=>p.color===color)+1)%PALETTE.length;const f=current();if(f){f.color=color;for(const s of f.strokes)s.color=color;}changed();};
 $('autoColor').onchange=()=>{if(!canEdit())return;checkpoint();const prefs=review.preferences;prefs.autoColor=$('autoColor').checked;const index=PALETTE.findIndex(p=>p.color===$('highlightColor').value);prefs.colorCursor=(index+(review.findings.length?1:0))%PALETTE.length;changed();};
 document.addEventListener('compositionstart',()=>composing=true);document.addEventListener('compositionend',()=>composing=false);
@@ -365,11 +368,12 @@ document.addEventListener('keydown',guard(async e=>{
   const typing=e.target.closest?.('input,textarea,select,[contenteditable]:not([contenteditable="false"])');
   if(e.key==='Escape'){
     if(gesture){e.preventDefault();cancelGesture();return;}
-    if(!canEdit())return;e.preventDefault();active=null;focused=null;prepared=false;pendingReportedId=null;setMode('navigate');renderFindings();drawOverlay();
+    if(!canEdit())return;e.preventDefault();active=null;prepared=false;pendingReportedId=null;setMode('navigate');renderFindings();drawOverlay();
     message('Navigate. Marks and comments kept.');return;
   }
   if((e.ctrlKey||e.metaKey)&&!e.altKey&&e.key==='Enter'&&e.target===$('comment')){e.preventDefault();await commands.next();return;}
   if(typing)return;
+  if(e.ctrlKey&&!e.metaKey&&!e.altKey&&!e.shiftKey&&e.key.toLowerCase()==='h'&&review){e.preventDefault();if(!e.repeat)toggleMarks();return;}
   if((e.ctrlKey||e.metaKey)&&!e.altKey&&e.key.toLowerCase()==='z'){e.preventDefault();commands[e.shiftKey?'redo':'undo']();return;}
   if(e.ctrlKey||e.metaKey||e.altKey||e.shiftKey||e.repeat)return;
   const name={n:'new',d:'draw',v:'navigate'}[e.key.toLowerCase()];if(name&&canEdit()){e.preventDefault();commands[name]();}
@@ -456,7 +460,7 @@ window.addEventListener('beforeunload',e=>{if(unprotectedWork()){saveNow();e.pre
 // is loaded only by the separate test pages, never by the application UI.
 export const operations={makeRecovery,makePackage,zipFiles,download,putSaved};
 export {saveNow};
-export const sessionStatus=()=>({...stamp(),dirty,busy,persistedRevision,saveConflict,unprotected:unprotectedWork(),recoveryStamp:recoveryStamp&&{...recoveryStamp},active,focused,prepared,mode,gesture:Boolean(gesture),undoLength:undo.length,exporting:Boolean(exportJob)});
+export const sessionStatus=()=>({...stamp(),dirty,busy,persistedRevision,saveConflict,unprotected:unprotectedWork(),recoveryStamp:recoveryStamp&&{...recoveryStamp},active,marksHidden:$('hide').checked,prepared,mode,gesture:Boolean(gesture),undoLength:undo.length,exporting:Boolean(exportJob)});
 const appApi={
   viewPosition,positionView,showHistorical,showScore,saveNow,finishFinding,
   leaveComparison:async()=>{await clearLeftDisplay();await positionView('source',{page:1,zoom:'fit'});appApi.corrections.close();},
