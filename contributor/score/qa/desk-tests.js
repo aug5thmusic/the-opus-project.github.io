@@ -29,7 +29,7 @@ const reachable=id=>{const r=$(id).getBoundingClientRect();return r.width>0&&r.h
 document.getElementById('run').onclick=async()=>{
   out.textContent='';count=0;document.getElementById('run').disabled=true;
   try{
-    await bridge();await load();await wait(()=>$('message').hidden,'routine announcement expires');assert($('storage').closest('header')&&$('storage').textContent==='Saved locally'&&!$('focusBar'),'saved status stays in the header with a stable status slot and no inactive isolation row');assert($('navigate').textContent==='Navigate'&&$('navigate').querySelector('u').textContent==='v'&&$('draw').querySelector('u').textContent==='D'&&$('newFinding').querySelector('u').textContent==='N'&&!frame.contentDocument.querySelector('[accesskey]'),'visible shortcut underlines preserve natural button labels without accesskeys');assert(/^(Ctrl|Cmd)\+Enter$/.test($('doneNext').querySelector('kbd').textContent),'Done & next displays its actual platform shortcut');$('autoColor').checked=true;fire('autoColor','change');await api().saveNow();
+    await bridge();await load();await wait(()=>$('message').hidden,'routine announcement expires');assert($('storage').closest('header')&&$('storage').textContent==='Saved locally'&&$('focusBar').hidden,'saved status stays in the header with a stable status slot and no inactive isolation row');assert($('navigate').textContent==='Navigate'&&$('navigate').querySelector('u').textContent==='v'&&$('draw').querySelector('u').textContent==='D'&&$('newFinding').querySelector('u').textContent==='N'&&!frame.contentDocument.querySelector('[accesskey]'),'visible shortcut underlines preserve natural button labels without accesskeys');assert(/^(Ctrl|Cmd)\+Enter$/.test($('doneNext').querySelector('kbd').textContent),'Done & next displays its actual platform shortcut');$('autoColor').checked=true;fire('autoColor','change');await api().saveNow();
     const baseline=annotations(),history=state().undoLength;key('d');$('draw').focus();const beforeCancel=frame.contentDocument.activeElement;await stroke(70,90,true);assert(frame.contentDocument.activeElement===beforeCancel&&$('commentDock').hidden,'cancelled first stroke neither opens the editor nor steals focus');
     assert(annotations()===baseline&&state().undoLength===history,'cancelled paint-first gesture creates no finding, history, number or color consumption');
     pointer('pointerdown',70,90);key('Escape');pointer('pointerup',90,90);
@@ -54,30 +54,25 @@ document.getElementById('run').onclick=async()=>{
     key('Enter',$('comment'),{ctrlKey:true});await wait(()=>!state().busy,'text-only shortcut');assert(!state().active&&state().prepared&&frame.contentDocument.activeElement===$('comment'),'Ctrl+Enter accepts text-only content and leaves the caret ready for the next note');
     edit('Second text-only note');await done();assert(!state().active&&state().prepared,'Done & next accepts text-only content');
     key('v');first=scene().review.findings[0];await clickMark(first);
-    assert(state().active===first.id&&!state().marksHidden,'pan click selects a comment with all marks visible');
-    const second=scene().review.findings[1],beforeHide=annotations(),beforeHideState=state();
-    assert(!frame.contentDocument.querySelector('.focus-finding')&&!$('showAll'),'findings have no repeated visibility buttons');
-    assert(!key('h',frame.contentDocument.body,{ctrlKey:true})&&state().marksHidden,'Ctrl+H hides all finding marks and prevents browser History');
-    const ink=()=>Array.from($('overlay').getContext('2d').getImageData(0,0,$('overlay').width,$('overlay').height).data).some((v,i)=>i%4===3&&v);
-    assert(!ink()&&annotations()===beforeHide&&state().active===beforeHideState.active&&state().undoLength===beforeHideState.undoLength,'hiding clears the canvas without changing annotations, active finding or undo');
-    key('h',frame.contentDocument.body,{ctrlKey:true,repeat:true});assert(state().marksHidden,'holding Ctrl+H does not repeatedly toggle marks');
-    await clickMark(second);assert(state().active===first.id,'hidden marks cannot be selected');
-    key('h',frame.contentDocument.body,{ctrlKey:true});assert(ink()&&!state().marksHidden&&annotations()===beforeHide,'Ctrl+H restores marks without changing saved content');
-    key('d');await stroke(90,95);
-    assert(state().active===first.id&&scene().review.findings[0].strokes.length===3,'hiding and showing preserves the destination of the next stroke');
-    await done();assert(!state().active&&state().mode==='draw','Done & next leaves the old finding and prepares drawing');
+    assert(state().active===first.id&&state().focused===null,'pan click selects a comment without isolating it');
+    const second=scene().review.findings[1];$('findings').querySelectorAll('.focus-finding')[1].click();
+    assert(state().focused===second.id&&state().active===first.id,'Only show filters another finding without changing the editor');
+    $('showAll').click();key('d');await stroke(90,95);
+    assert(state().active===first.id&&scene().review.findings[0].strokes.length===3,'Show all preserves the destination of the next stroke');
+    $('findings').querySelector('.focus-finding').click();await done();
+    assert(!state().active&&!state().focused&&state().mode==='draw','Done & next visibly leaves the old editing and isolation states');
     key('v');await clickMark(second,true);assert(state().active===second.id,'numbered marker selects its comment');
     const selected=state().active;await zoom('2');const vp=await viewport(),[px,py]=vp.convertToViewportPoint(...first.strokes[0].points[0]);
     pointer('pointerdown',px,py);pointer('pointermove',px-40,py-50);pointer('pointermove',px,py);pointer('pointerup',px,py);
     assert(state().active===selected,'a pan that returns to its start still never selects a finding');
     await clickMark(first);assert(state().active===first.id,'stroke hit testing works at 200% with scrolling');
     await zoom('0.75');await clickMark(second);assert(state().active===second.id,'stroke hit testing works at 75%');
+    $('findings').querySelector('.focus-finding').click();await clickMark(second);assert(state().active===second.id,'hidden marks are not selectable');$('showAll').click();
     await page(2);const beforePage=state().active;pointer('pointerdown',px,py);pointer('pointerup',px,py);assert(state().active===beforePage,'marks from another page are not hit tested');await page(1);
     // All key routes share command guards; native text undo remains untouched.
     const savedState=state();for(const id of ['comment','sourcePage','highlightColor'])for(const k of ['n','d','v'])key(k,$(id));
     const editable=frame.contentDocument.createElement('div');editable.contentEditable='true';frame.contentDocument.body.append(editable);for(const k of ['n','d','v'])key(k,editable);editable.remove();
     assert(state().active===savedState.active&&state().mode===savedState.mode,'letter shortcuts ignore inputs, textareas, selects and contenteditable');
-    for(const id of ['comment','sourcePage','highlightColor'])assert(key('h',$(id),{ctrlKey:true})&&!state().marksHidden,'Ctrl+H leaves text and form controls alone: '+id);
     for(const extra of [{isComposing:true},{ctrlKey:true},{metaKey:true},{altKey:true},{shiftKey:true}])key('n',frame.contentDocument.body,extra);
     fire('comment','compositionstart');key('Escape');key('n');fire('comment','compositionend');
     assert(state().active===savedState.active&&state().mode===savedState.mode,'composition and modified letters do not mutate review state');
@@ -111,7 +106,7 @@ document.getElementById('run').onclick=async()=>{
     await wait(()=>$('message').hidden,'completion confirmation expires');for(const [width,height]of [[1280,800],[724,420],[600,420],[533,420],[444,420]]){
       frame.style.width=width+'px';frame.style.height=height+'px';await new Promise(r=>setTimeout(r,250));await ready();
       assert(layout().scroll<=height+1&&layout().docY===0,'no document scrolling at '+width+' × '+height);
-      assert(['sourceViewer','renderedViewer','newFinding','draw','navigate','undo','redo','brush','highlightColor','autoColor','finishReview','exportTask'].every(reachable),'scores remain side by side and review controls reachable at '+width+' × '+height);
+      assert(['sourceViewer','renderedViewer','newFinding','draw','navigate','undo','redo','brush','highlightColor','autoColor','finishReview','exportTask','showAll'].filter(id=>id!=='showAll'||!$('showAll').hidden).every(reachable),'scores remain side by side and review controls reachable at '+width+' × '+height);
       assert(reachable('comment')&&reachable('saveFinding')&&reachable('doneNext')&&!$('comment').closest('[inert]'),'comment editor and completion stay automatically reachable without opening a drawer at '+width+' × '+height);
       const sourceHead=$('sourceViewer').querySelector('.viewer-head').getBoundingClientRect(),renderHead=$('renderedViewer').querySelector('.viewer-head').getBoundingClientRect();
       assert(Math.abs(sourceHead.top-renderHead.top)<1&&Math.abs(sourceHead.height-renderHead.height)<1,'source and render navigation stay aligned at '+width+' × '+height);

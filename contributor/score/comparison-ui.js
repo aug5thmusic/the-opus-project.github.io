@@ -6,7 +6,7 @@ const element=(tag,text,cls)=>{const el=document.createElement(tag);if(text!=nul
 // permissions; navigation, drafts and remembered passages never imply approval.
 export function installComparison(api){
   const header=element('section',null,'correction-header');header.id='correctionHeader';header.hidden=true;document.body.prepend(header);
-  const root=element('section',null,'correction-comparison');root.id='correctionComparison';root.hidden=true;root.setAttribute('aria-label','Review the reported problem');document.querySelector('main').before(root);
+  const root=element('section',null,'correction-comparison');root.id='correctionComparison';root.hidden=true;root.setAttribute('aria-label','Review the reported problem');$('focusBar').before(root);
   const filesDialog=element('dialog');filesDialog.id='correctionFiles';filesDialog.setAttribute('aria-label','Files and review history');
   const filesHead=element('div',null,'dialog-head');filesHead.append(element('h2','Files and review history'));const filesClose=element('button','Close');filesClose.onclick=()=>filesDialog.close();filesHead.append(filesClose);filesDialog.append(filesHead);document.body.append(filesDialog);
   const problemsDialog=element('dialog');problemsDialog.id='correctionProblems';problemsDialog.setAttribute('aria-label','Reported problems');
