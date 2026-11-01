@@ -292,6 +292,9 @@ export function installShared(api) {
       row.append(select); $('sharedFindingChoices').append(row);
     }
     if (!reportScene.review.findings.length) $('sharedFindingChoices').append(node('p', 'No errors marked.'));
+    // Apply the visible default before asynchronous draft reads. An errors-only
+    // form must not briefly offer a clean-coverage declaration while loading.
+    scopeControls();
     const draftContext = {workId: draftWork, snapshotId: draftSnapshot, mode: kind, findingIds: reportScene.review.findings.map(finding => finding.id)};
     const legacyName = `report:${draftWork}:${draftSnapshot}:review`;
     let savedDraft = matchingReportDraft(await client.draft(reportDraftName), draftContext);
