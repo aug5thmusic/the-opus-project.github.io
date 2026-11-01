@@ -91,7 +91,7 @@ export function installShared(api) {
       <p><button id="sharedImportCompletion" type="button">Import completed review</button><input id="sharedCompletionFile" type="file" accept=".zip,application/zip" hidden></p>
       <section id="sharedCompletionImport" hidden aria-labelledby="sharedCompletionHeading"><h3 id="sharedCompletionHeading">Send saved review to project</h3><p id="sharedCompletionSummary"></p><p id="sharedCompletionWork"></p><p>The original ZIP will be saved with your contribution.</p><button id="sharedSendCompletion" class="primary" type="button">Send to project</button><button id="sharedCancelCompletion" type="button">Cancel</button></section>
       <form id="sharedReportForm" hidden>
-        <h3 id="sharedReportHeading">Submit findings</h3><p id="sharedDraftNotice"></p>
+        <h3 id="sharedReportHeading">Submit findings</h3><p id="sharedDraftNotice"></p><p id="sharedDraftSave" class="hint" role="status" aria-live="polite"></p>
         <fieldset id="sharedScopeFields"><legend>What are you submitting?</legend><label><input type="radio" name="sharedScope" value="report"> Just the errors I marked</label><label><input type="radio" name="sharedScope" value="partial"> I proofread part of the score</label><label><input type="radio" name="sharedScope" value="whole"> I proofread the whole score</label></fieldset>
         <label id="sharedScopeLabel">Pages or passages checked <textarea id="sharedScopeNote" rows="2" maxlength="4000" placeholder="For example: page 1, first two systems, right hand"></textarea></label>
         <label id="sharedCleanLabel"><input id="sharedClean" type="checkbox"> I found no errors in the part I checked.</label>
@@ -118,6 +118,7 @@ export function installShared(api) {
   let client = null, detail = null, selected = null, busy = false, mode = 'report', reportScene = null, proposal = null, proposalPosition = 0;
   let taskAttempt = null, taskLinks = [], proposalImages = [], handoffLinks = [], loadedSnapshot = null, proposalRender = 0;
   let reportDraftName = null, reportLegacyDraftName = null, reportFormGeneration = 0, reportFormEdits = 0;
+  let reportSaveQueue = Promise.resolve(), reportSaveSequence = 0, reportSavePending = 0, reportSaveFailed = false;
   let completionImport = null;
   const decisionDrafts = new Map();
   const readSelectedWork = createCurrentWorkReader(slug => client.request(`/api/works/${idPart(slug)}`), () => selected);
@@ -271,6 +272,7 @@ export function installShared(api) {
     reportDraftName = `report:${draftWork}:${draftSnapshot}:${kind}${proposalId ? ':' + proposalId : ''}`;
     reportLegacyDraftName = null;
     $('sharedReportForm').hidden = false; $('sharedFixSection').hidden = true;
+    $('sharedReportForm').dataset.draftState = 'loading'; $('sharedDraftSave').textContent = 'Restoring local report draft…';
     $('sharedReportHeading').textContent = 'Submit findings';
     $('sharedDraftNotice').textContent = proposalId ? 'Reporting on the AI version currently open.' : reportScene.review.snapshotId === detail.current.snapshotId ? '' : 'These findings refer to an earlier score version.';
     $('sharedDraftNotice').hidden = ! $('sharedDraftNotice').textContent;
@@ -297,6 +299,7 @@ export function installShared(api) {
     scopeControls();
     const draftContext = {workId: draftWork, snapshotId: draftSnapshot, mode: kind, findingIds: reportScene.review.findings.map(finding => finding.id)};
     const legacyName = `report:${draftWork}:${draftSnapshot}:review`;
+    await reportSaveQueue.catch(() => {});
     let savedDraft = matchingReportDraft(await client.draft(reportDraftName), draftContext);
     if (!savedDraft && !proposalId) {
       const legacyDraft = matchingReportDraft(await client.draft(legacyName), {...draftContext, mode: 'review'});
@@ -317,7 +320,12 @@ export function installShared(api) {
         if (select && select.dataset.alreadySubmitted !== 'true') select.value = finding.kind;
       }
     }
-    scopeControls(); $('sharedReportForm').scrollIntoView({block: 'start'}); controls();
+    scopeControls();
+    if (originalEdits === reportFormEdits) {
+      $('sharedReportForm').dataset.draftState = savedDraft ? 'saved' : 'ready';
+      $('sharedDraftSave').textContent = savedDraft ? 'Report draft saved on this device.' : '';
+    }
+    $('sharedReportForm').scrollIntoView({block: 'start'}); controls();
   }
   function scopeControls() {
     const scoped = ['partial', 'whole'].includes($('sharedScopeFields').querySelector('input:checked')?.value);
@@ -335,12 +343,30 @@ export function installShared(api) {
     const draft = {version: 1, workId: selected, snapshotId: reportScene.review.snapshotId, mode, legacyReviewDraft: Boolean(reportLegacyDraftName), scope, clean: $('sharedClean').checked,
       scopeNote: $('sharedScopeNote').value, displayName: $('sharedDisplayName').value, discussionUrl: $('sharedDiscussionUrl').value, discussionAuthor: $('sharedDiscussionAuthor').value, discussionSummary: $('sharedDiscussionSummary').value,
       findings: choices.map(input => ({id: input.dataset.sharedFinding, checked: input.checked, ...(input.dataset.submitted === 'true' ? {coverageChecked: scoped ? input.checked : input.dataset.coverageChecked === 'true'} : {}), kind: types.find(select => select.dataset.sharedKind === input.dataset.sharedFinding)?.value ?? 'transcription'}))};
-    client.saveDraft(reportDraftName, draft).catch(error => status(`The report form could not be saved locally: ${error.message}. Keep this page open; your score annotations are still kept separately.`, true));
+    const name = reportDraftName, generation = reportFormGeneration, sequence = ++reportSaveSequence;
+    reportSavePending++; reportSaveFailed = false;
+    $('sharedReportForm').dataset.draftState = 'saving'; $('sharedDraftSave').textContent = 'Saving report draft…';
+    const write = reportSaveQueue.catch(() => {}).then(() => client.saveDraft(name, draft));
+    reportSaveQueue = write;
+    write.then(() => {
+      if (sequence === reportSaveSequence) reportSaveFailed = false;
+      if (generation === reportFormGeneration && sequence === reportSaveSequence) {
+        $('sharedReportForm').dataset.draftState = 'saved'; $('sharedDraftSave').textContent = 'Report draft saved on this device.';
+      }
+    }, error => {
+      if (sequence === reportSaveSequence) reportSaveFailed = true;
+      if (generation === reportFormGeneration && sequence === reportSaveSequence) {
+        $('sharedReportForm').dataset.draftState = 'error'; $('sharedDraftSave').textContent = 'Report draft not saved. Keep this page open and edit to retry.';
+        status('The report form could not be saved locally: ' + error.message + '. Your current form remains open.', true);
+      }
+    }).finally(() => { reportSavePending--; });
+    return write;
   }
   async function sendReport(event) {
     event.preventDefault(); requireUser(); requireWork();
     if (!reportScene || !api.matches(reportScene.stamp)) throw new Error('Your local review changed. Reopen Submit findings to include the latest draft.');
     await run(async () => {
+      await reportSaveQueue;
       const selectedIds = new Set([...$('sharedFindingChoices').querySelectorAll('[data-shared-finding]:checked')].map(input => input.dataset.sharedFinding));
       const scene = {...reportScene, review: clone(reportScene.review)}; scene.review.findings = scene.review.findings.filter(finding => selectedIds.has(finding.id));
       const kind = $('sharedScopeFields').querySelector('input:checked')?.value;
@@ -667,7 +693,13 @@ export function installShared(api) {
   $('sharedFixPath').onclick = () => { $('sharedFixSection').hidden = false; $('sharedReportForm').hidden = true; $('sharedFixSection').scrollIntoView({block: 'start'}); };
   $('sharedReviewFixesPath').onclick = () => { $('sharedProposals').scrollIntoView({block: 'start'}); };
   $('sharedReportForm').onsubmit = guard(sendReport);
-  $('sharedReportForm').addEventListener('input', saveReportForm);
+  $('sharedReportForm').addEventListener('input', event => {
+    // Radio/checkbox state is finalized by change handlers before it is saved.
+    if (!event.target.matches('input[type=radio],input[type=checkbox],select')) saveReportForm();
+  });
+  window.addEventListener('beforeunload', event => {
+    if (reportSavePending || reportSaveFailed) { event.preventDefault(); event.returnValue = ''; }
+  });
   $('sharedReportForm').addEventListener('change', saveReportForm);
   $('sharedScopeFields').addEventListener('change', scopeControls);
   $('sharedGetTask').onclick = guard(task);

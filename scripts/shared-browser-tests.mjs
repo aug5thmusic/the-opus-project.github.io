@@ -65,7 +65,15 @@ export async function runShared({browser,serve,evidence,root}){
   async function textFinding(page,text){await page.locator(await page.locator('#reportAnotherError').isVisible()?'#reportAnotherError':'#newFinding').click();await page.locator('#comment').fill(text);await page.locator('#saveFinding').click();await page.waitForFunction(()=>document.querySelector('#storage').textContent==='Saved locally');}
   async function sendReport(page){const before=new URL(page.url()).searchParams.get('report');await page.locator('#sharedSendReport').click();await page.waitForFunction(before=>document.querySelector('#sharedReportForm').hidden&&new URL(location.href).searchParams.get('report')!==before,before);return new URL(page.url()).searchParams.get('report');}
   async function submit(page){await submitForm(page);return sendReport(page);}
-  async function findingsForm(page){if(await page.locator('#sharedDialog').isVisible())await page.locator('#sharedClose').click();await submitForm(page);}
+  async function findingsForm(page){
+    if(await page.locator('#sharedDialog').isVisible())await page.locator('#sharedClose').click();
+    await submitForm(page);
+    await page.waitForFunction(()=>{const form=document.querySelector('#sharedReportForm');return !form.hidden&&['ready','saved'].includes(form.dataset.draftState);});
+  }
+  async function reloadAfterDraft(page){
+    await page.waitForFunction(()=>{const form=document.querySelector('#sharedReportForm');return !form?.dataset.draftState||['ready','saved'].includes(form.dataset.draftState);});
+    await page.reload();
+  }
   async function getTask(page){
     if(!await page.locator('#sharedDialog').isVisible())await back(page);
     await page.locator('#sharedFixPath').click();await page.locator('#sharedGetTask').click();
@@ -156,7 +164,7 @@ export async function runShared({browser,serve,evidence,root}){
     check(await eve.locator('input[name=sharedScope][value=report]').isChecked()&&!await eve.locator('#sharedCleanLabel').isVisible(),'reporting errors needs no coverage declaration');
     await eve.locator('input[name=sharedScope][value=partial]').check();await eve.locator('#sharedScopeNote').fill('SIMULATED partial review: first system only.');
     await eve.locator('#sharedDisplayName').fill('SIMULATED optional typed name');
-    await eve.reload();await eve.waitForFunction(()=>document.body.dataset.ready==='true'&&!document.querySelector('#sharedAvailable')?.hidden);
+    await reloadAfterDraft(eve);await eve.waitForFunction(()=>document.body.dataset.ready==='true'&&!document.querySelector('#sharedAvailable')?.hidden);
     await eve.locator('#sharedDialog').waitFor({state:'visible'});
     await eve.locator('#sharedDevLogin').fill('eve');await eve.locator('#sharedDevForm button').click();await eve.waitForFunction(()=>document.querySelector('#sharedIdentity').textContent.includes('@eve'));
     await openScore(eve);await findingsForm(eve);await eve.waitForFunction(()=>document.querySelector('#sharedScopeNote').value==='SIMULATED partial review: first system only.');
@@ -170,7 +178,7 @@ export async function runShared({browser,serve,evidence,root}){
     },{serviceURL,draftPrefix});
     await findingsForm(eve);await eve.waitForFunction(()=>document.querySelector('#sharedScopeNote').value==='SIMULATED older proofreading draft.');
     await eve.locator('#sharedDisplayName').fill('SIMULATED restored older draft');
-    await eve.reload();await eve.locator('#sharedDialog').waitFor({state:'visible'});
+    await reloadAfterDraft(eve);await eve.locator('#sharedDialog').waitFor({state:'visible'});
     await eve.locator('#sharedDevLogin').fill('eve');await eve.locator('#sharedDevForm button').click();await eve.waitForFunction(()=>document.querySelector('#sharedIdentity').textContent.includes('@eve'));
     await openScore(eve);await findingsForm(eve);
     await eve.waitForFunction(()=>document.querySelector('#sharedDisplayName').value==='SIMULATED restored older draft');
@@ -192,6 +200,10 @@ export async function runShared({browser,serve,evidence,root}){
     await findingsForm(alice);
     const knownChoices=alice.locator('[data-shared-finding]');
     check(await knownChoices.evaluateAll(items=>items.length===2&&items.every(item=>item.disabled&&!item.checked)),'quick reports suppress already submitted findings');
+    await alice.evaluate(async()=>{
+      const {SharedClient}=await import('./shared-client.js'),save=SharedClient.prototype.saveDraft;
+      SharedClient.prototype.saveDraft=async function(...args){await new Promise(resolve=>setTimeout(resolve,100));return save.apply(this,args);};
+    });
     await alice.locator('input[name=sharedScope][value=partial]').check();await knownChoices.first().check();await knownChoices.last().uncheck();
     await alice.locator('#sharedScopeNote').fill('SIMULATED broader coverage with an existing error.');
     await alice.locator('input[name=sharedScope][value=whole]').check();
@@ -199,10 +211,23 @@ export async function runShared({browser,serve,evidence,root}){
     await alice.locator('input[name=sharedScope][value=report]').check();assert(await knownChoices.first().isDisabled()&&!await knownChoices.first().isChecked());
     await alice.locator('input[name=sharedScope][value=partial]').check();
     check(await knownChoices.first().isChecked()&&!await knownChoices.first().isDisabled(),'coverage scopes retain chosen existing findings across scope changes');
-    await alice.reload();await alice.locator('#sharedDialog').waitFor({state:'visible'});
+    check(await alice.locator('#sharedDraftSave').innerText()==='Saving report draft…','slow local writes remain explicitly pending');
+    check(await alice.evaluate(()=>{const event=new Event('beforeunload',{cancelable:true});window.dispatchEvent(event);return event.defaultPrevented;}),'pending report writes protect navigation from silently losing the latest selection');
+
+    await reloadAfterDraft(alice);await alice.locator('#sharedDialog').waitFor({state:'visible'});
     await alice.locator('#sharedDevLogin').fill('alice');await alice.locator('#sharedDevForm button').click();await alice.waitForFunction(()=>document.querySelector('#sharedIdentity').textContent.includes('@alice'));
     await openScore(alice);await findingsForm(alice);await alice.waitForFunction(()=>document.querySelector('#sharedScopeNote').value==='SIMULATED broader coverage with an existing error.');
     check(await alice.locator('input[name=sharedScope][value=partial]').isChecked()&&await knownChoices.first().isChecked()&&!await knownChoices.first().isDisabled(),'coverage draft restores an existing finding after reload');
+    await alice.evaluate(async()=>{
+      const {SharedClient}=await import('./shared-client.js'),save=SharedClient.prototype.saveDraft;let fail=true;
+      SharedClient.prototype.saveDraft=async function(...args){if(fail){fail=false;throw new Error('SIMULATED local draft write failure');}return save.apply(this,args);};
+    });
+    await alice.locator('#sharedScopeNote').fill('SIMULATED unsaved temporary coverage edit.');
+    await alice.waitForFunction(()=>document.querySelector('#sharedReportForm').dataset.draftState==='error');
+    check((await alice.locator('#sharedScopeNote').inputValue())==='SIMULATED unsaved temporary coverage edit.','failed local draft writes retain the visible edit and show an unsaved state');
+    await alice.locator('#sharedScopeNote').fill('SIMULATED broader coverage with an existing error.');
+    await alice.waitForFunction(()=>document.querySelector('#sharedReportForm').dataset.draftState==='saved');
+    check(await alice.locator('input[name=sharedScope][value=partial]').isChecked()&&await knownChoices.first().isChecked(),'a later acknowledged save recovers without changing the selected finding');
     const coverageId=await sendReport(alice),coverage=await api('/api/reports/'+coverageId);
     check(!coverage.clean&&coverage.scope.kind==='partial'&&coverage.referencedFindingIds.length===1&&coverage.findings.length===0&&(await state()).findings.length===4,'broader coverage references an existing error without creating a duplicate');
     // Normal authenticated users cannot mutate reports or claim application/verification.
