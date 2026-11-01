@@ -245,12 +245,14 @@ class FailClosedTests(unittest.TestCase):
             runner._outputs(raw.getvalue(), 'compile')
 
     def test_output_limit_is_checked_before_member_read(self):
-        output = io.BytesIO()
-        with tarfile.open(fileobj=output, mode='w') as tar:
-            member = tarfile.TarInfo('score.pdf'); member.size = runner.MAX_OUTPUT + 1
-            tar.addfile(member)
-        with self.assertRaises(runner.IsolatedRunError):
-            runner._outputs(output.getvalue(), 'compile')
+        # A header-only archive exercises the declared-size guard without
+        # allocating MAX_OUTPUT bytes. Python 3.13+ requires fileobj when
+        # TarFile.addfile() writes a nonempty regular-file member.
+        member = tarfile.TarInfo('score.pdf')
+        member.size = runner.MAX_OUTPUT + 1
+        archive = member.tobuf() + b'\0' * 1024
+        with self.assertRaisesRegex(runner.IsolatedRunError, 'Output exceeds its byte limit'):
+            runner._outputs(archive, 'compile')
 
     def test_fixed_policy_and_stopped_container_before_output(self):
         calls = []
